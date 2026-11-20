@@ -5,11 +5,11 @@ const NOTES_KEY = 'caa_ledger_notes_v1'
 const BOOKMARK_KEY = 'caa_ledger_bookmark_v1'
 
 export const STAMP_PRESETS: StampPreset[] = [
-  { label: 'APPROVED', subtext: 'Cleared by Commission', ink: 'forest' },
+  { label: 'APPROVED', subtext: 'Cleared by Management', ink: 'forest' },
   { label: 'VERIFIED', subtext: 'Alias & Service Confirmed', ink: 'ink' },
   { label: 'PROMOTE', subtext: 'Recommend Elevation', ink: 'gold' },
   { label: 'WATCHLIST', subtext: 'Hold Under Review', ink: 'crimson' },
-  { label: 'VOUCHED', subtext: 'Syndicate Sponsor Stamp', ink: 'forest' },
+  { label: 'VOUCHED', subtext: 'Official Vouch Stamp', ink: 'forest' },
 ]
 
 export function loadAllStamps(): Record<string, CustomStamp[]> {

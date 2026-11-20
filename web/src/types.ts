@@ -15,20 +15,18 @@ export interface ApplicationInfo {
 }
 
 export interface OperativeStats {
-  points: number
-  income: number
   eventWins: number
   reports: number
   referrals: number
   awards: string[]
+  awardsCount: number
 }
 
 export interface OperativeRanks {
-  points: number
-  income: number
   eventWins: number
   reports: number
   referrals: number
+  awardsCount: number
 }
 
 export interface InviteeRef {
@@ -72,10 +70,9 @@ export interface RosterTotals {
   leadershipCount: number
   madeCount: number
   internCount: number
-  combinedPoints: number
-  combinedIncome: number
   combinedReports: number
   combinedEventWins: number
+  combinedReferrals: number
   totalAwards: number
   flaggedMembers: number
   activeStrikesCount: number
@@ -100,7 +97,7 @@ export interface RosterResponse {
   members: MemberDossier[]
 }
 
-export type PodiumCategoryKey = 'points' | 'income' | 'referrals' | 'eventwins' | 'reports'
+export type PodiumCategoryKey = 'reports' | 'eventwins' | 'referrals' | 'awards'
 
 export interface PodiumEntry {
   rank: number
@@ -142,11 +139,4 @@ export type FilterMode =
   | 'awarded'
   | 'promodue'
 
-export type SortField =
-  | 'id'
-  | 'points'
-  | 'income'
-  | 'reports'
-  | 'eventWins'
-  | 'referrals'
-  | 'recent'
+export type SortField = 'id' | 'reports' | 'eventWins' | 'referrals' | 'awards' | 'recent'

@@ -49,7 +49,7 @@ export function StampKitPopover({
     e.preventDefault()
     const clean = customLabel.trim().toUpperCase()
     if (!clean) return
-    onSlamStamp({ label: clean.slice(0, 18), subtext: 'Custom Commission Stamp', ink: customInk })
+    onSlamStamp({ label: clean.slice(0, 18), subtext: 'Custom Management Stamp', ink: customInk })
     setCustomLabel('')
   }
 
@@ -69,7 +69,7 @@ export function StampKitPopover({
       <div className="mb-2.5 flex items-center justify-between border-b border-[#a68037]/40 pb-1.5">
         <span className="inline-flex items-center gap-1.5 text-xs font-bold tracking-wider text-[#d7b262] uppercase">
           <Stamp className="h-3.5 w-3.5" />
-          Commission Stamp Kit
+          Management Stamp Kit
         </span>
         <button
           type="button"
@@ -121,7 +121,7 @@ export function StampKitPopover({
             maxLength={18}
             value={customLabel}
             onChange={(e) => setCustomLabel(e.target.value)}
-            placeholder="e.g. CAPO PICK"
+            placeholder="e.g. RESPECTED"
             className="min-w-0 flex-1 border border-[#a68037]/45 bg-[#120b09] px-2 py-1 text-xs text-[#f4ecdb] placeholder-[#9b896f]"
           />
           <select

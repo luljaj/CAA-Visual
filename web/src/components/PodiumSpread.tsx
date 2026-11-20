@@ -1,32 +1,33 @@
-import { Trophy } from 'lucide-react'
+import { Camera, Trophy } from 'lucide-react'
 import { useState } from 'react'
 import type { MemberDossier, PodiumCategoryKey, PodiumEntry, PodiumResponse } from '../types'
 import { formatNumber, MedallionSvg } from './EngravedIcons'
 import { PortraitFrame } from './PortraitFrame'
 
 const PODIUM_TABS: Array<{ key: PodiumCategoryKey; label: string; unit: string }> = [
-  { key: 'points', label: 'Points', unit: 'PTS' },
-  { key: 'income', label: 'Income', unit: 'DONATIONS' },
-  { key: 'referrals', label: 'Referrals', unit: 'RECRUITS' },
-  { key: 'eventwins', label: 'Event Wins', unit: 'WINS' },
   { key: 'reports', label: 'Reports', unit: 'REPORTS' },
+  { key: 'eventwins', label: 'Event Wins', unit: 'WINS' },
+  { key: 'referrals', label: 'Referrals', unit: 'RECRUITS' },
+  { key: 'awards', label: 'Awards', unit: 'AWARDS' },
 ]
 
 export function PodiumLeftPage({
   podium,
   allMembers,
   onSelectMember,
+  onOpenPhotoPlate,
 }: {
   podium: PodiumResponse | null
   allMembers: MemberDossier[]
   onSelectMember: (discordId: string) => void
+  onOpenPhotoPlate: (plateIndex: number) => void
 }) {
-  const [category, setCategory] = useState<PodiumCategoryKey>('points')
+  const [category, setCategory] = useState<PodiumCategoryKey>('reports')
   const activeTab = PODIUM_TABS.find((t) => t.key === category) ?? PODIUM_TABS[0]
   const entries: PodiumEntry[] = podium?.categories?.[category] ?? []
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full flex-col gap-3.5">
       <div className="border-b border-[#5c4e40]/45 pb-2.5">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-xl font-bold text-[#1a1512]" style={{ fontFamily: 'var(--font-display)' }}>
@@ -65,7 +66,7 @@ export function PodiumLeftPage({
           No ranking entries available for {activeTab.label}.
         </div>
       ) : (
-        <ol className="flex flex-col gap-3">
+        <ol className="flex flex-col gap-2.5">
           {entries.map((entry) => {
             const match = entry.discordId
               ? allMembers.find((m) => m.discordId === entry.discordId)
@@ -84,7 +85,7 @@ export function PodiumLeftPage({
                   type="button"
                   disabled={!clickable}
                   onClick={() => match && onSelectMember(match.discordId)}
-                  className={`flex w-full items-center justify-between gap-3 border p-3 text-left transition-colors ${rankTint} ${
+                  className={`flex w-full items-center justify-between gap-3 border p-2.5 text-left transition-colors ${rankTint} ${
                     clickable ? 'cursor-pointer hover:border-[#8f1d1d]' : 'cursor-default'
                   }`}
                 >
@@ -127,12 +128,33 @@ export function PodiumLeftPage({
         </ol>
       )}
 
-      <p
-        className="mt-auto border-t border-dotted border-[#6b4e1c]/45 pt-3 text-[11px] text-[#4c3e31]"
-        style={{ fontFamily: 'var(--font-mono)' }}
+      {/* Archival Assembly Plate II */}
+      <button
+        type="button"
+        onClick={() => onOpenPhotoPlate(1)}
+        className="group mt-auto cursor-pointer border border-[#75624a]/60 bg-[#faf3e4] p-1.5 text-left transition-colors hover:border-[#8f1d1d]"
       >
-        Mirrors the five Association pillars from <span className="font-bold">/podium</span>. Click any ranked operative on file to inspect their dossier.
-      </p>
+        <div className="relative overflow-hidden border border-[#5c4e40]/45 bg-[#12100e]">
+          <img
+            src="/photos/caa-bridge-gathering.jpg"
+            alt="C.A.A. Bridge Assembly"
+            className="h-24 w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]"
+          />
+          <span
+            className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 border border-[#d7b262]/65 bg-[#120d0a]/85 px-1.5 py-0.5 text-[9px] font-bold text-[#e7cf93] uppercase"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            <Camera className="h-2.5 w-2.5" />
+            <span>Plate II</span>
+          </span>
+        </div>
+        <div className="mt-1 flex items-center justify-between px-0.5 text-[10.5px] text-[#4c3e31]">
+          <span style={{ fontFamily: 'var(--font-mono)' }}>C.A.A. Full Dress Assembly</span>
+          <span className="font-bold text-[#8f1d1d]" style={{ fontFamily: 'var(--font-mono)' }}>
+            Inspect →
+          </span>
+        </div>
+      </button>
     </div>
   )
 }

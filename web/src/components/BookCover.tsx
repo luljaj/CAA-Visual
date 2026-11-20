@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { LockOpen, Volume2, VolumeX } from 'lucide-react'
-import { playSealCrack } from '../sound'
+import { playBrassClick, playSealCrack } from '../sound'
 import type { StatusResponse } from '../types'
 import { BrassCorner, CaaCrest, WaxSealSvg } from './EngravedIcons'
 
@@ -10,12 +10,14 @@ export function BookCover({
   muted,
   onToggleMute,
   onOpenBook,
+  onOpenPhotoPlate,
 }: {
   status: StatusResponse | null
   memberCount: number
   muted: boolean
   onToggleMute: () => void
   onOpenBook: () => void
+  onOpenPhotoPlate: (plateIndex: number) => void
 }) {
   const [unsealing, setUnsealing] = useState(false)
 
@@ -28,11 +30,12 @@ export function BookCover({
     }, 520)
   }
 
+  const formattedCount = new Intl.NumberFormat('en-US').format(memberCount)
   const sourceLabel = status?.liveConnected
-    ? `Live Supabase · ${memberCount} Files`
+    ? `Live Supabase · ${formattedCount} Files`
     : status?.hasImported
-      ? `Imported CSV · ${memberCount} Files`
-      : `Sample Archive · ${memberCount} Files`
+      ? `Imported CSV · ${formattedCount} Files`
+      : `Sample Archive · ${formattedCount} Files`
 
   return (
     <div className="banker-desk dark-selection flex min-h-[100dvh] flex-col items-center justify-center px-4 py-6">
@@ -48,7 +51,52 @@ export function BookCover({
         <span>{muted ? 'Audio Muted' : 'Desk Foley'}</span>
       </button>
 
-      <div className="cover-stage flex flex-col items-center">
+      <div className="cover-stage relative flex flex-col items-center">
+        {/* Peeking archival C.A.A. photographs on the desk behind the ledger cover (desktop) */}
+        <button
+          type="button"
+          onClick={() => {
+            playBrassClick()
+            onOpenPhotoPlate(1)
+          }}
+          title="Inspect C.A.A. Assembly Photograph"
+          className="hidden lg:block group absolute -top-4 -left-36 z-0 w-44 -rotate-[9deg] cursor-pointer border border-[#cbb99a] bg-[#f4ecdb] p-1.5 pb-4 text-left shadow-[0_14px_30px_rgba(0,0,0,0.65)] transition-transform duration-200 hover:-translate-y-1 hover:-rotate-[6deg]"
+        >
+          <img
+            src="/photos/caa-bridge-gathering.jpg"
+            alt="C.A.A. Bridge Assembly"
+            className="h-28 w-full object-cover contrast-105"
+          />
+          <span
+            className="mt-1.5 block text-center text-[9.5px] font-bold tracking-wider text-[#3d3126]"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            PLATE II · ASSEMBLY
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            playBrassClick()
+            onOpenPhotoPlate(2)
+          }}
+          title="Inspect C.A.A. Headquarters Photograph"
+          className="hidden lg:block group absolute bottom-16 -right-36 z-0 w-44 rotate-[8deg] cursor-pointer border border-[#cbb99a] bg-[#f4ecdb] p-1.5 pb-4 text-left shadow-[0_14px_30px_rgba(0,0,0,0.65)] transition-transform duration-200 hover:-translate-y-1 hover:rotate-[5deg]"
+        >
+          <img
+            src="/photos/caa-lounge-autumn.jpg"
+            alt="C.A.A. Headquarters Lounge"
+            className="h-28 w-full object-cover contrast-105"
+          />
+          <span
+            className="mt-1.5 block text-center text-[9.5px] font-bold tracking-wider text-[#3d3126]"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            PLATE III · HEADQUARTERS
+          </span>
+        </button>
+
         {/* Leather-bound physical book cover */}
         <div
           role="button"
@@ -61,7 +109,7 @@ export function BookCover({
               triggerOpen()
             }
           }}
-          className={`book-cover-enter leather-binding group relative w-[min(90vw,460px)] cursor-pointer select-none rounded-r-md rounded-l-[4px] border border-[#4e2224]/70 ${
+          className={`book-cover-enter leather-binding group relative z-10 w-[min(90vw,460px)] cursor-pointer select-none rounded-r-md rounded-l-[4px] border border-[#4e2224]/70 ${
             unsealing ? 'cover-unsealing' : ''
           }`}
           style={{ aspectRatio: '3 / 4.08' }}
@@ -105,11 +153,11 @@ export function BookCover({
                 className="mt-4 text-[11px] tracking-[0.26em] text-[#d7b262]/90 uppercase"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
-                Custom Adversaries Association
+                C.A.A. · Custom Adversaries
               </p>
             </div>
 
-            {/* Debossed Gold Title */}
+            {/* Debossed Gold Title & Slogan */}
             <div className="relative z-10 my-auto px-2">
               <div className="mx-auto mb-3 h-px w-24 bg-[#d7b262]/50" />
               <h1
@@ -120,10 +168,16 @@ export function BookCover({
               </h1>
               <div className="mx-auto mt-3 h-px w-24 bg-[#d7b262]/50" />
               <p
-                className="mt-4 text-xs leading-relaxed tracking-[0.18em] text-[#cbb894] uppercase"
+                className="mt-4 text-sm italic leading-relaxed text-[#e8d5ad]"
+                style={{ fontFamily: 'var(--font-serif)' }}
+              >
+                “How you dress is how you present yourself.”
+              </p>
+              <p
+                className="mt-2.5 text-[10px] tracking-[0.18em] text-[#bcae93] uppercase"
                 style={{ fontFamily: 'var(--font-mono)' }}
               >
-                Personnel · Front Door · Standing
+                Strict Invite / Vouch Only
               </p>
             </div>
 
@@ -133,7 +187,7 @@ export function BookCover({
                 className="text-[11px] tracking-[0.2em] text-[#a68037] uppercase"
                 style={{ fontFamily: 'var(--font-mono)' }}
               >
-                Vol. IV — Management Copy
+                Founded Summer of 2022
               </p>
             </div>
           </div>
@@ -150,7 +204,7 @@ export function BookCover({
         </div>
 
         {/* Desk Nameplate & Prompt */}
-        <div className="mt-8 flex flex-col items-center gap-2.5 text-center">
+        <div className="relative z-10 mt-8 flex flex-col items-center gap-2.5 text-center">
           <div
             className="inline-flex items-center gap-2 rounded border border-[#a68037]/50 bg-[#140e0b]/90 px-4 py-1.5 text-xs tracking-wider text-[#d7b262] shadow-[0_6px_18px_rgba(0,0,0,0.55)]"
             style={{ fontFamily: 'var(--font-mono)' }}

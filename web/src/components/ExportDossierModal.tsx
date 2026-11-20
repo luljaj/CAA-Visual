@@ -159,14 +159,13 @@ export function ExportDossierModal({
     ctx.fillText('PERFORMANCE & STANDING LEDGER', 654, 178)
 
     const metrics = [
-      ['SYNDICATE POINTS', formatNumber(member.stats.points), `Rank #${member.ranks.points || '-'}`],
-      ['INCOME / DONATIONS', formatNumber(member.stats.income), `Rank #${member.ranks.income || '-'}`],
       ['TEAMER REPORTS', formatNumber(member.stats.reports), `Rank #${member.ranks.reports || '-'}`],
       ['EVENT WINS', formatNumber(member.stats.eventWins), `Rank #${member.ranks.eventWins || '-'}`],
       ['REFERRALS CREDITED', formatNumber(member.stats.referrals), `Rank #${member.ranks.referrals || '-'}`],
+      ['AWARDS & CITATIONS', formatNumber(member.stats.awardsCount), `Rank #${member.ranks.awardsCount || '-'}`],
     ]
 
-    let rowY = 230
+    let rowY = 236
     for (const [label, val, rankTxt] of metrics) {
       ctx.fillStyle = '#4c3e31'
       ctx.font = 'bold 16px "Courier New", monospace'
@@ -177,16 +176,16 @@ export function ExportDossierModal({
       ctx.fillText(rankTxt, 976, rowY)
 
       ctx.fillStyle = '#1a1512'
-      ctx.font = 'bold 24px "Courier New", monospace'
+      ctx.font = 'bold 26px "Courier New", monospace'
       ctx.fillText(val, 1114, rowY)
       ctx.textAlign = 'left'
 
       ctx.strokeStyle = 'rgba(107, 78, 28, 0.25)'
       ctx.beginPath()
-      ctx.moveTo(654, rowY + 14)
-      ctx.lineTo(1114, rowY + 14)
+      ctx.moveTo(654, rowY + 18)
+      ctx.lineTo(1114, rowY + 18)
       ctx.stroke()
-      rowY += 54
+      rowY += 68
     }
 
     // Disciplinary Status Banner
@@ -230,8 +229,8 @@ export function ExportDossierModal({
 
     // Footer
     ctx.fillStyle = '#5c4e40'
-    ctx.font = '13px "Courier New", monospace'
-    ctx.fillText('THE BLACK LEDGER · ARCHIVAL PRINT EDITION · CUSTOM ADVERSARIES ASSOCIATION', 58, H - 56)
+    ctx.font = 'italic 14px Georgia, serif'
+    ctx.fillText('C.A.A. — “How you dress is how you present yourself.”', 58, H - 56)
   }, [open, member, customStamps])
 
   if (!open || !member) return null

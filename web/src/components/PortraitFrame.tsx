@@ -1,9 +1,11 @@
+import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { fetchRobloxAvatar } from '../api'
+import { createPortal } from 'react-dom'
+import { fetchRobloxAvatar, type RobloxAvatarBundle } from '../api'
 import type { DataSource, RankTier } from '../types'
 import { PaperclipSvg } from './EngravedIcons'
 
-const sessionAvatarCache = new Map<string, string | null>()
+const sessionAvatarCache = new Map<string, RobloxAvatarBundle>()
 
 function hashString(input: string): number {
   let h = 2166136261
@@ -35,10 +37,11 @@ function VintageOperativeIllustration({
     rankTier === 'leadership' ? '#191413' : rankTier === 'made' ? '#24201f' : '#35312c'
   const tieColor = rankTier === 'leadership' ? '#7a1919' : rankTier === 'made' ? '#8c6118' : '#3d4f43'
   const skinColor = sepia ? '#d4be9f' : '#d8c2a8'
-  const initials = username
-    .replace(/[^A-Za-z0-9]/g, '')
-    .slice(0, 2)
-    .toUpperCase() || 'OP'
+  const initials =
+    username
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 2)
+      .toUpperCase() || 'OP'
 
   return (
     <svg
@@ -52,7 +55,13 @@ function VintageOperativeIllustration({
           <stop offset="0%" stopColor={bgTone[0]} />
           <stop offset="100%" stopColor={bgTone[1]} />
         </linearGradient>
-        <pattern id={`hatch-${discordId}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(25)">
+        <pattern
+          id={`hatch-${discordId}`}
+          width="6"
+          height="6"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(25)"
+        >
           <line x1="0" y1="0" x2="0" y2="6" stroke={bgTone[2]} strokeOpacity="0.16" strokeWidth="1" />
         </pattern>
       </defs>
@@ -60,7 +69,6 @@ function VintageOperativeIllustration({
       <rect width="160" height="176" fill={`url(#bg-${discordId})`} />
       <rect width="160" height="176" fill={`url(#hatch-${discordId})`} />
 
-      {/* Mugshot / intake scale ticks on right edge */}
       {[32, 48, 64, 80, 96, 112, 128].map((y) => (
         <line
           key={y}
@@ -74,23 +82,22 @@ function VintageOperativeIllustration({
         />
       ))}
 
-      {/* Suit & shoulders */}
       <path d="M18 176C22 136 44 122 80 122C116 122 138 136 142 176H18Z" fill={coatColor} />
-      {/* Shirt collar V */}
       <polygon points="64,122 96,122 80,158" fill="#efe6d4" />
-      {/* Tie */}
       <polygon points="75,126 85,126 88,162 80,170 72,162" fill={tieColor} />
-      {/* Lapels */}
       <polygon points="52,124 66,122 76,162 56,148" fill="#120f0e" opacity="0.65" />
       <polygon points="108,124 94,122 84,162 104,148" fill="#120f0e" opacity="0.65" />
 
-      {/* Neck & head */}
       <rect x="69" y="102" width="22" height="24" rx="8" fill={skinColor} />
       <ellipse cx="80" cy="80" rx="25" ry="30" fill={skinColor} stroke="#231a13" strokeWidth="1.4" />
-      {/* Jaw shadow */}
-      <path d="M56 82C58 98 68 109 80 109C92 109 102 98 104 82" fill="none" stroke="#3c2a1d" strokeOpacity="0.35" strokeWidth="2" />
+      <path
+        d="M56 82C58 98 68 109 80 109C92 109 102 98 104 82"
+        fill="none"
+        stroke="#3c2a1d"
+        strokeOpacity="0.35"
+        strokeWidth="2"
+      />
 
-      {/* Hair or Fedora */}
       {hasHat ? (
         <g>
           <path d="M53 60C55 40 65 32 80 32C95 32 105 40 107 60Z" fill="#1b1512" />
@@ -104,7 +111,6 @@ function VintageOperativeIllustration({
         />
       )}
 
-      {/* Facial brow & features */}
       {hasGlasses ? (
         <g stroke="#1b1512" strokeWidth="1.8" fill="rgba(26,21,18,0.18)">
           <rect x="61" y="72" width="16" height="10" rx="2" />
@@ -122,7 +128,6 @@ function VintageOperativeIllustration({
       <path d="M80 78V89L77 91" stroke="#3c2b1e" strokeWidth="1.3" fill="none" strokeLinecap="round" />
       <path d="M72 97C76 99 84 99 88 97" stroke="#2f2117" strokeWidth="1.5" fill="none" strokeLinecap="round" />
 
-      {/* Bottom dossier tag */}
       <rect x="0" y="152" width="160" height="24" fill="rgba(18, 13, 10, 0.84)" />
       <text
         x="80"
@@ -130,11 +135,11 @@ function VintageOperativeIllustration({
         textAnchor="middle"
         fill="#e7d9bf"
         fontFamily="Courier Prime, monospace"
-        fontSize="11"
+        fontSize="10.5"
         fontWeight="700"
-        letterSpacing="1.6"
+        letterSpacing="1.4"
       >
-        CAA · {initials}
+        C.A.A. · {initials}
       </text>
     </svg>
   )
@@ -155,101 +160,218 @@ export function PortraitFrame({
   initialUrl?: string | null
   size?: 'sm' | 'md' | 'lg'
 }) {
-  const [resolvedUrl, setResolvedUrl] = useState<string | null>(initialUrl ?? null)
+  const [bundle, setBundle] = useState<RobloxAvatarBundle>({
+    headshotUrl: initialUrl ?? null,
+    fullBodyUrl: null,
+  })
   const [imgFailed, setImgFailed] = useState(false)
-  const [sepia, setSepia] = useState(true)
+  const [sepia, setSepia] = useState(false)
+  const [poseMode, setPoseMode] = useState<'headshot' | 'suit'>('headshot')
+  const [inspectOpen, setInspectOpen] = useState(false)
+
+  useEffect(() => {
+    if (!inspectOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setInspectOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [inspectOpen])
 
   useEffect(() => {
     setImgFailed(false)
+    if (size === 'sm') {
+      setBundle({ headshotUrl: null, fullBodyUrl: null })
+      return
+    }
     if (initialUrl) {
-      setResolvedUrl(initialUrl)
+      setBundle({ headshotUrl: initialUrl, fullBodyUrl: null })
       return
     }
     if (source === 'archive') {
-      setResolvedUrl(null)
+      setBundle({ headshotUrl: null, fullBodyUrl: null })
       return
     }
     const cacheKey = username.toLowerCase()
-    if (sessionAvatarCache.has(cacheKey)) {
-      setResolvedUrl(sessionAvatarCache.get(cacheKey) ?? null)
+    const cached = sessionAvatarCache.get(cacheKey)
+    if (cached) {
+      setBundle(cached)
       return
     }
     let cancelled = false
-    void fetchRobloxAvatar(username).then((url) => {
-      sessionAvatarCache.set(cacheKey, url)
-      if (!cancelled) setResolvedUrl(url)
+    void fetchRobloxAvatar(username).then((res) => {
+      sessionAvatarCache.set(cacheKey, res)
+      if (!cancelled) setBundle(res)
     })
     return () => {
       cancelled = true
     }
-  }, [username, source, initialUrl])
+  }, [username, source, initialUrl, size])
 
   if (size === 'sm') {
     return (
       <div className="h-9 w-9 shrink-0 overflow-hidden rounded-[2px] border border-[#6b4e1c]/45 bg-[#dfd0b1]">
-        {resolvedUrl && !imgFailed ? (
-          <img
-            src={resolvedUrl}
-            alt={username}
-            onError={() => setImgFailed(true)}
-            className="h-full w-full object-cover sepia-[0.3] contrast-110"
-          />
-        ) : (
-          <VintageOperativeIllustration
-            username={username}
-            discordId={discordId}
-            rankTier={rankTier}
-            sepia
-          />
-        )}
+        <VintageOperativeIllustration
+          username={username}
+          discordId={discordId}
+          rankTier={rankTier}
+          sepia
+        />
       </div>
     )
   }
+
+  const activeUrl =
+    poseMode === 'suit' && bundle.fullBodyUrl
+      ? bundle.fullBodyUrl
+      : bundle.headshotUrl ?? bundle.fullBodyUrl
 
   const dimClass = size === 'lg' ? 'w-[132px]' : 'w-[120px]'
   const imgHeight = size === 'lg' ? 'h-[138px]' : 'h-[122px]'
 
   return (
-    <div className={`relative shrink-0 ${dimClass}`}>
-      <PaperclipSvg className="pointer-events-none absolute -top-5 right-2 z-20 rotate-[11deg] drop-shadow-[0_2px_2px_rgba(0,0,0,0.3)]" />
-      <div className="portrait-card-hover -rotate-[1.8deg] border border-[#b4a186] bg-[#faf3e5] p-1.5 pb-2 shadow-[0_5px_14px_rgba(26,21,18,0.28)]">
-        <div className={`relative w-full overflow-hidden border border-[#8e7b62]/55 bg-[#d9cbb3] ${imgHeight}`}>
-          {resolvedUrl && !imgFailed ? (
-            <img
-              src={resolvedUrl}
-              alt={`${username} avatar`}
-              onError={() => setImgFailed(true)}
-              className={`h-full w-full object-cover transition-[filter] duration-200 ${
-                sepia ? 'sepia-[0.55] contrast-110 brightness-95' : ''
-              }`}
-            />
-          ) : (
-            <VintageOperativeIllustration
-              username={username}
-              discordId={discordId}
-              rankTier={rankTier}
-              sepia={sepia}
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => setSepia((s) => !s)}
-            title="Toggle sepia / natural color print"
-            className="absolute top-1 left-1 z-10 cursor-pointer border border-[#8e7b62]/65 bg-[#faf3e5]/90 px-1 py-0.2 text-[9px] font-bold uppercase tracking-wider text-[#3d3126] hover:bg-[#e5d6b8]"
-            style={{ fontFamily: 'var(--font-mono)' }}
+    <>
+      <div className={`relative shrink-0 ${dimClass}`}>
+        <PaperclipSvg className="pointer-events-none absolute -top-5 right-2 z-20 rotate-[11deg] drop-shadow-[0_2px_2px_rgba(0,0,0,0.3)]" />
+        <div className="portrait-card-hover -rotate-[1.8deg] border border-[#b4a186] bg-[#faf3e5] p-1.5 pb-2 shadow-[0_5px_14px_rgba(26,21,18,0.28)]">
+          <div
+            className={`relative w-full overflow-hidden border border-[#8e7b62]/55 bg-[#d9cbb3] ${imgHeight}`}
           >
-            {sepia ? 'CLR' : 'SEP'}
-          </button>
-        </div>
-        <div className="mt-1.5 px-0.5 text-center">
-          <span
-            className="block truncate text-[10.5px] font-bold tracking-wide text-[#3d3126]"
-            style={{ fontFamily: 'var(--font-mono)' }}
-          >
-            {username}
-          </span>
+            {activeUrl && !imgFailed ? (
+              <button
+                type="button"
+                onClick={() => setInspectOpen(true)}
+                title="Inspect operative attire & presentation"
+                className="block h-full w-full cursor-pointer"
+              >
+                <img
+                  src={activeUrl}
+                  alt={`${username} ${poseMode}`}
+                  onError={() => setImgFailed(true)}
+                  className={`h-full w-full object-contain bg-[#ebe1cc] transition-[filter] duration-200 ${
+                    sepia ? 'sepia-[0.55] contrast-110 brightness-95' : ''
+                  }`}
+                />
+              </button>
+            ) : (
+              <VintageOperativeIllustration
+                username={username}
+                discordId={discordId}
+                rankTier={rankTier}
+                sepia={sepia}
+              />
+            )}
+
+            <div className="absolute top-1 left-1 z-10 flex gap-1">
+              <button
+                type="button"
+                onClick={() => setSepia((s) => !s)}
+                title="Toggle sepia / natural color print"
+                className="cursor-pointer border border-[#8e7b62]/65 bg-[#faf3e5]/90 px-1 py-0.2 text-[9px] font-bold uppercase tracking-wider text-[#3d3126] hover:bg-[#e5d6b8]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                {sepia ? 'CLR' : 'SEP'}
+              </button>
+
+              {bundle.fullBodyUrl && bundle.headshotUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPoseMode((p) => (p === 'headshot' ? 'suit' : 'headshot'))}
+                  title="Switch between headshot & full suit attire"
+                  className="cursor-pointer border border-[#8f1d1d]/65 bg-[#faf3e5]/90 px-1 py-0.2 text-[9px] font-bold uppercase tracking-wider text-[#8f1d1d] hover:bg-[#f2dfda]"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  {poseMode === 'headshot' ? 'SUIT' : 'MUG'}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="mt-1.5 px-0.5 text-center">
+            <span
+              className="block truncate text-[10.5px] font-bold tracking-wide text-[#3d3126]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            >
+              {username}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* High-Res Attire Inspection Lightbox mounted to document.body */}
+      {inspectOpen &&
+        (bundle.fullBodyUrl || bundle.headshotUrl) &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Attire Inspection — ${username}`}
+            onClick={() => setInspectOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl border border-[#d7b262]/70 bg-[#17100c] p-4 text-[#f4ecdb] shadow-[0_28px_72px_rgba(0,0,0,0.9)]"
+            >
+              <div
+                className="mb-3 flex items-center justify-between border-b border-[#a68037]/40 pb-2"
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                <span className="text-xs font-bold tracking-wider text-[#d7b262] uppercase">
+                  C.A.A. Attire Inspection — {username}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setInspectOpen(false)}
+                  aria-label="Close attire inspection"
+                  className="cursor-pointer p-1 text-[#cbb894] hover:text-[#f4ecdb]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {bundle.fullBodyUrl && (
+                  <div className="border border-[#a68037]/40 bg-[#f4ecdb] p-2 text-center">
+                    <img
+                      src={bundle.fullBodyUrl}
+                      alt={`${username} full attire`}
+                      className="mx-auto h-64 w-full object-contain"
+                    />
+                    <span
+                      className="mt-1 block text-[10px] font-bold tracking-wider text-[#3d3126] uppercase"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    >
+                      Full Suit Presentation
+                    </span>
+                  </div>
+                )}
+                {bundle.headshotUrl && (
+                  <div className="border border-[#a68037]/40 bg-[#f4ecdb] p-2 text-center">
+                    <img
+                      src={bundle.headshotUrl}
+                      alt={`${username} headshot`}
+                      className="mx-auto h-64 w-full object-contain"
+                    />
+                    <span
+                      className="mt-1 block text-[10px] font-bold tracking-wider text-[#3d3126] uppercase"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    >
+                      Headshot Close-Up
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <p
+                className="mt-3 text-center text-sm italic text-[#d7b262]"
+                style={{ fontFamily: 'var(--font-serif)' }}
+              >
+                “How you dress is how you present yourself.”
+              </p>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }

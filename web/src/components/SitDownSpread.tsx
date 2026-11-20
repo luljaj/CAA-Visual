@@ -19,12 +19,10 @@ function SitDownColumn({
   onOpenDossier: (discordId: string) => void
 }) {
   const rows: Array<{ label: string; mine: number; theirs: number; lowerIsBetter?: boolean }> = [
-    { label: 'Points', mine: member.stats.points, theirs: opponent.stats.points },
-    { label: 'Income', mine: member.stats.income, theirs: opponent.stats.income },
     { label: 'Field Reports', mine: member.stats.reports, theirs: opponent.stats.reports },
     { label: 'Event Wins', mine: member.stats.eventWins, theirs: opponent.stats.eventWins },
     { label: 'Referrals', mine: member.stats.referrals, theirs: opponent.stats.referrals },
-    { label: 'Awards Held', mine: member.stats.awards.length, theirs: opponent.stats.awards.length },
+    { label: 'Awards Held', mine: member.stats.awardsCount, theirs: opponent.stats.awardsCount },
     {
       label: 'Active Strikes',
       mine: member.totalActiveStrikes,
@@ -155,7 +153,7 @@ export function SitDownLeftPage({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-[#1a1512]" style={{ fontFamily: 'var(--font-display)' }}>
-          The Sit-Down · Comparison
+          Side-by-Side Comparison
         </h2>
         <button
           type="button"
@@ -169,7 +167,7 @@ export function SitDownLeftPage({
       </div>
 
       <SitDownColumn
-        sideLabel="Operative A"
+        sideLabel="Employee A"
         member={leftMember}
         opponent={rightMember}
         allMembers={allMembers}
@@ -202,7 +200,7 @@ export function SitDownRightPage({
       </div>
 
       <SitDownColumn
-        sideLabel="Operative B"
+        sideLabel="Employee B"
         member={rightMember}
         opponent={leftMember}
         allMembers={allMembers}

@@ -1,4 +1,4 @@
-import { Database, KeyRound, Search, Trash2, Upload } from 'lucide-react'
+import { Camera, Database, KeyRound, Search, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { connectSupabase, fetchMemberById, importCsvLedger } from '../api'
 import { clearAllArchivistMarks } from '../archivistStore'
@@ -96,7 +96,7 @@ export function VaultLeftPage({
 
           <button
             type="button"
-            disabled={!status?.liveConnected}
+            disabled={!status?.liveConfigured && !status?.liveConnected}
             onClick={() => onSelectSource('live')}
             className={`brass-btn cursor-pointer border px-2.5 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-45 ${
               activeSource === 'live'
@@ -204,9 +204,11 @@ export function VaultLeftPage({
 export function VaultRightPage({
   onImported,
   onClearedMarks,
+  onOpenPhotoPlate,
 }: {
   onImported: () => void
   onClearedMarks: () => void
+  onOpenPhotoPlate: (plateIndex: number) => void
 }) {
   const [statsFileName, setStatsFileName] = useState<string | null>(null)
   const [appsFileName, setAppsFileName] = useState<string | null>(null)
@@ -317,6 +319,34 @@ export function VaultRightPage({
         {importMsg && <p className="font-bold text-[#1d4d35]">{importMsg}</p>}
         {importErr && <p className="font-bold text-[#8f1d1d]">{importErr}</p>}
       </div>
+
+      {/* Headquarters Archival Photo Plate III */}
+      <button
+        type="button"
+        onClick={() => onOpenPhotoPlate(2)}
+        className="group cursor-pointer border border-[#75624a]/60 bg-[#faf3e4] p-1.5 text-left transition-colors hover:border-[#8f1d1d]"
+      >
+        <div className="relative overflow-hidden border border-[#5c4e40]/45 bg-[#12100e]">
+          <img
+            src="/photos/caa-lounge-autumn.jpg"
+            alt="C.A.A. Headquarters Lounge"
+            className="h-24 w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]"
+          />
+          <span
+            className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 border border-[#d7b262]/65 bg-[#120d0a]/85 px-1.5 py-0.5 text-[9px] font-bold text-[#e7cf93] uppercase"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            <Camera className="h-2.5 w-2.5" />
+            <span>Plate III</span>
+          </span>
+        </div>
+        <div className="mt-1 flex items-center justify-between px-0.5 text-[10.5px] text-[#4c3e31]">
+          <span style={{ fontFamily: 'var(--font-mono)' }}>C.A.A. Headquarters Lounge</span>
+          <span className="font-bold text-[#8f1d1d]" style={{ fontFamily: 'var(--font-mono)' }}>
+            Inspect →
+          </span>
+        </div>
+      </button>
 
       {/* Local Archivist Storage Management */}
       <div

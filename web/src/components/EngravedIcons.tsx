@@ -49,11 +49,11 @@ export function CaaCrest({
         textAnchor="middle"
         fill="#d7b262"
         fontFamily="Cinzel, Georgia, serif"
-        fontSize="13"
+        fontSize="11"
         fontWeight="700"
-        letterSpacing="2"
+        letterSpacing="1.6"
       >
-        CAA
+        C.A.A.
       </text>
     </svg>
   )

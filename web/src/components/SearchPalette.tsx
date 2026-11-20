@@ -26,16 +26,28 @@ export function SearchPalette({
     }
   }, [open])
 
-  const results = useMemo(() => {
+  const { results, totalMatches } = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return members.slice(0, 10)
-    return members
-      .filter((m) =>
-        [
-          m.username,
-          m.displayName,
+    if (!q) {
+      return { results: members.slice(0, 12), totalMatches: members.length }
+    }
+
+    const scored: Array<{ member: MemberDossier; score: number }> = []
+    for (const m of members) {
+      const uname = m.username.toLowerCase()
+      const dname = m.displayName.toLowerCase()
+      const idStr = String(m.id)
+      const qClean = q.startsWith('#') ? q.slice(1) : q
+
+      let score = 0
+      if (idStr === qClean || m.discordId === q) score = 100
+      else if (uname === q || dname === q) score = 95
+      else if (uname.startsWith(q) || dname.startsWith(q)) score = 80
+      else if (uname.includes(q) || dname.includes(q)) score = 60
+      else {
+        const hay = [
           m.discordId,
-          String(m.id),
+          idStr,
           m.position,
           m.application.inviter ?? '',
           m.application.reason,
@@ -43,9 +55,19 @@ export function SearchPalette({
         ]
           .join(' ')
           .toLowerCase()
-          .includes(q),
-      )
-      .slice(0, 10)
+        if (hay.includes(q)) score = 30
+      }
+
+      if (score > 0) {
+        scored.push({ member: m, score })
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score || a.member.id - b.member.id)
+    return {
+      results: scored.slice(0, 12).map((s) => s.member),
+      totalMatches: scored.length,
+    }
   }, [members, query])
 
   useEffect(() => {
@@ -168,8 +190,12 @@ export function SearchPalette({
           className="flex items-center justify-between border-t border-[#6b4e1c]/30 bg-[#eadcc2]/75 px-4 py-1.5 text-[10px] text-[#5c4e40]"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          <span>↑↓ Navigate · Enter to Flip Folio</span>
-          <span>Esc to Close</span>
+          <span>
+            {totalMatches > results.length
+              ? `Showing top ${results.length} of ${totalMatches} matches`
+              : `${totalMatches} match${totalMatches === 1 ? '' : 'es'}`}
+          </span>
+          <span>↑↓ Navigate · Enter to Flip · Esc</span>
         </div>
       </div>
     </div>

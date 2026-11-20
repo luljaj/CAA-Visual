@@ -223,7 +223,10 @@ export function OpenBookShell({
 
                 {/* Bottom-Right Folio Footer & Dog-Ear Turn Next */}
                 <div className="relative z-10 flex items-center justify-between border-t border-[#9a8366]/30 bg-[#eadcc2]/65 px-5 py-2 text-[11px] text-[#5c4e40]" style={{ fontFamily: 'var(--font-mono)' }}>
-                  <span className="tracking-wider uppercase">Custom Adversaries Assoc.</span>
+                  <span className="hidden sm:inline truncate italic text-[#4c3e31]" style={{ fontFamily: 'var(--font-serif)' }}>
+                    “How you dress is how you present yourself.”
+                  </span>
+                  <span className="sm:hidden tracking-wider uppercase">C.A.A.</span>
                   <button
                     type="button"
                     disabled={!canNext}

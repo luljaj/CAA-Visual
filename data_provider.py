@@ -9,7 +9,7 @@ import json
 import os
 import time
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -88,14 +88,23 @@ def normalize_application_record(raw_record: Any) -> dict[str, Any] | None:
         return None
 
     if isinstance(record, dict):
+        inviter_raw = record.get("inviter")
+        if isinstance(inviter_raw, str):
+            inviter_clean = inviter_raw.strip()
+            if inviter_clean.casefold() in ("", "none", "null", "n/a"):
+                inviter_raw = None
+            else:
+                inviter_raw = inviter_clean
+
         return {
             "roblox_username": record.get("roblox_username") or record.get("username"),
             "reason": record.get("reason"),
-            "inviter": record.get("inviter"),
+            "inviter": inviter_raw,
             "inviter_id": _as_str_id(record.get("inviter_id")),
             "created_at": parse_datetime(
-                record.get("created_at")
+                record.get("date")
                 or record.get("submission_date")
+                or record.get("created_at")
                 or record.get("created")
                 or record.get("raw_date")
             ),
@@ -150,7 +159,6 @@ def _parse_awards(value: Any) -> list[str]:
 def _infer_position_and_tier(
     *,
     explicit_position: str | None,
-    points: int,
     reports: int,
     event_wins: int,
     awards_count: int,
@@ -158,18 +166,18 @@ def _infer_position_and_tier(
     if explicit_position:
         pos = explicit_position.strip()
         lower = pos.casefold()
-        if any(k in lower for k in ("godfather", "underboss", "consigliere", "boss", "director", "admin", "lead")):
+        if any(k in lower for k in ("director", "founder", "executive", "advisor", "admin", "lead", "management", "manager")):
             return pos, "leadership"
         if "intern" in lower or "probation" in lower:
             return pos, "intern"
         return pos, "made"
 
-    score = points + (reports * 4) + (event_wins * 80) + (awards_count * 120)
-    if score >= 2500:
-        return "Caporegime", "made"
-    if score >= 1200:
-        return "Senior Enforcer", "made"
-    if score >= 250 or reports >= 15 or event_wins >= 1:
+    score = (reports * 8) + (event_wins * 120) + (awards_count * 150)
+    if score >= 1800:
+        return "Respected Employee", "made"
+    if score >= 600:
+        return "Senior Employee", "made"
+    if reports >= 5 or event_wins >= 1 or awards_count >= 1:
         return "Employee", "made"
     return "Intern", "intern"
 
@@ -214,14 +222,11 @@ def _build_dossier(
     source: str,
 ) -> dict[str, Any]:
     awards = _parse_awards(stats_row.get("awards"))
-    points = _as_int(stats_row.get("points"), 0)
-    income = _as_int(stats_row.get("donations") or stats_row.get("income"), 0)
     event_wins = _as_int(stats_row.get("eventswon") or stats_row.get("event_wins"), 0)
     reports = _as_int(stats_row.get("reports_answered") or stats_row.get("reports"), 0)
 
     position, rank_tier = _infer_position_and_tier(
         explicit_position=stats_row.get("position") or stats_row.get("role"),
-        points=points,
         reports=reports,
         event_wins=event_wins,
         awards_count=len(awards),
@@ -264,22 +269,25 @@ def _build_dossier(
             "formattedDate": format_application_date(created_dt),
             "isLegacyMigrated": is_legacy,
             "weeksSinceApplication": weeks_since,
-            "promotionReviewDue": rank_tier == "intern" and weeks_since is not None and weeks_since >= 6,
+            "promotionReviewDue": (
+                not is_legacy
+                and rank_tier == "intern"
+                and weeks_since is not None
+                and weeks_since >= 6
+            ),
         },
         "stats": {
-            "points": points,
-            "income": income,
             "eventWins": event_wins,
             "reports": reports,
             "referrals": referrals,
             "awards": awards,
+            "awardsCount": len(awards),
         },
         "ranks": {
-            "points": 0,
-            "income": 0,
             "eventWins": 0,
             "reports": 0,
             "referrals": 0,
+            "awardsCount": 0,
         },
         "invitees": invitees,
         "strikes": strikes,
@@ -294,8 +302,13 @@ class LedgerDataProvider:
         self.live_connected: bool = False
         self.live_error: str | None = None
         self.imported_roster: list[dict[str, Any]] | None = None
-        self._avatar_cache: dict[str, tuple[float, str | None]] = {}
+        self._avatar_cache: dict[str, tuple[float, dict[str, str | None]]] = {}
+        self._avatar_pending: dict[str, asyncio.Task[dict[str, str | None]]] = {}
+        self._avatar_semaphore = asyncio.Semaphore(4)
+        self._roster_lock = asyncio.Lock()
         self._archive_cache: list[dict[str, Any]] | None = None
+        self._live_roster_cache: tuple[float, list[dict[str, Any]]] | None = None
+        self._live_podium_cache: tuple[float, tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]] | None = None
         self._auto_init_supabase()
 
     def _read_env_credentials(self) -> tuple[str | None, str | None]:
@@ -320,7 +333,8 @@ class LedgerDataProvider:
         self.live_configured = True
         try:
             self.supabase = create_client(url, key)
-            self.live_connected = True
+            # Client construction does not verify database reachability.
+            self.live_connected = False
             self.live_error = None
         except Exception as exc:
             self.supabase = None
@@ -367,6 +381,8 @@ class LedgerDataProvider:
             self.live_configured = True
             self.live_connected = True
             self.live_error = None
+            self._live_roster_cache = None
+            self._live_podium_cache = None
             return {
                 "connected": True,
                 "error": None,
@@ -463,29 +479,61 @@ class LedgerDataProvider:
             source="live",
         )
 
-    def _fetch_live_roster_sync(self) -> list[dict[str, Any]]:
+    def _fetch_all_table_rows(
+        self,
+        table_name: str,
+        *,
+        order_col: str | None = "id",
+        page_size: int = 1000,
+    ) -> list[dict[str, Any]]:
+        if not self.supabase:
+            return []
+        rows: list[dict[str, Any]] = []
+        start = 0
+        while True:
+            query = self.supabase.table(table_name).select("*")
+            if order_col:
+                query = query.order(order_col)
+            batch = query.range(start, start + page_size - 1).execute().data or []
+            rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            start += page_size
+        return rows
+
+    def _stats_activity_score(self, row: dict[str, Any]) -> tuple[int, int]:
+        awards = _parse_awards(row.get("awards"))
+        score = (
+            _as_int(row.get("reports_answered") or row.get("reports"), 0) * 10
+            + _as_int(row.get("eventswon") or row.get("event_wins"), 0) * 50
+            + len(awards) * 50
+        )
+        return score, _as_int(row.get("id"), 0)
+
+    def _fetch_live_roster_sync(self, *, refresh: bool = False) -> list[dict[str, Any]]:
         if not self.supabase:
             raise RuntimeError("Supabase is not connected.")
+
+        now = time.time()
+        if not refresh and self._live_roster_cache and now - self._live_roster_cache[0] < 60:
+            return self._live_roster_cache[1]
 
         stats_rows: list[dict[str, Any]] = []
         app_rows: list[dict[str, Any]] = []
         strikes_rows: list[dict[str, Any]] = []
 
-        # Attempt direct table reads first
+        # Attempt paginated direct table reads first
         direct_ok = False
         try:
-            stats_resp = self.supabase.table("stats").select("*").order("id").execute()
-            stats_rows = stats_resp.data or []
-            apps_resp = self.supabase.table("applications").select("*").execute()
-            app_rows = apps_resp.data or []
+            stats_rows = self._fetch_all_table_rows("stats", order_col="id")
+            app_rows = self._fetch_all_table_rows("applications", order_col="id")
             direct_ok = bool(stats_rows or app_rows)
         except Exception:
             direct_ok = False
 
         if direct_ok:
             try:
-                strikes_resp = self.supabase.table("strikes").select("*").execute()
-                strikes_rows = strikes_resp.data or []
+                strikes_rows = self._fetch_all_table_rows("strikes", order_col="id")
             except Exception:
                 strikes_rows = []
 
@@ -500,7 +548,10 @@ class LedgerDataProvider:
             stats_by_did: dict[str, dict[str, Any]] = {}
             for row in stats_rows:
                 did = _as_str_id(row.get("discordid") or row.get("discord_id"))
-                if did:
+                if not did:
+                    continue
+                existing = stats_by_did.get(did)
+                if existing is None or self._stats_activity_score(row) >= self._stats_activity_score(existing):
                     stats_by_did[did] = row
 
             all_dids = list(dict.fromkeys([*stats_by_did.keys(), *app_by_did.keys()]))
@@ -563,7 +614,10 @@ class LedgerDataProvider:
                 for inv in m["invitees"]:
                     inv["position"] = pos_by_did.get(inv["discordId"])
 
-            return finalize_roster(members)
+            finalized = finalize_roster(members)
+            self._live_roster_cache = (time.time(), finalized)
+            self._live_podium_cache = None
+            return finalized
 
         # Fallback: discover unique IDs via public podium RPCs and hydrate individually
         discovered_ids: list[int] = []
@@ -594,9 +648,12 @@ class LedgerDataProvider:
                 "Connected to Supabase, but direct table access was restricted by RLS and no podium entries were returned."
             )
 
-        return finalize_roster(members)
+        finalized = finalize_roster(members)
+        self._live_roster_cache = (time.time(), finalized)
+        self._live_podium_cache = None
+        return finalized
 
-    async def get_roster(self, source: str = "auto") -> dict[str, Any]:
+    async def get_roster(self, source: str = "auto", *, refresh: bool = False) -> dict[str, Any]:
         requested = (source or "auto").lower()
 
         if requested == "imported":
@@ -616,7 +673,8 @@ class LedgerDataProvider:
 
         if requested in ("auto", "live") and self.supabase is not None:
             try:
-                members = await asyncio.to_thread(self._fetch_live_roster_sync)
+                async with self._roster_lock:
+                    members = await asyncio.to_thread(self._fetch_live_roster_sync, refresh=refresh)
                 self.live_connected = True
                 self.live_error = None
                 return {
@@ -626,14 +684,25 @@ class LedgerDataProvider:
                     "members": members,
                 }
             except Exception as exc:
+                self.live_connected = False
                 self.live_error = str(exc)
-                if requested == "live":
+                self._live_roster_cache = None
+                self._live_podium_cache = None
+                if requested == "live" or self.live_configured:
                     return {
                         "source": "live",
                         "liveError": str(exc),
                         "totals": compute_totals([]),
                         "members": [],
                     }
+
+        if requested == "live" or (requested == "auto" and self.live_configured):
+            return {
+                "source": "live",
+                "liveError": self.live_error or "Supabase is not configured.",
+                "totals": compute_totals([]),
+                "members": [],
+            }
 
         if requested == "auto" and self.imported_roster:
             return {
@@ -674,11 +743,10 @@ class LedgerDataProvider:
 
     def _podium_from_roster(self, members: list[dict[str, Any]]) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
         mapping = {
-            "points": "points",
-            "income": "income",
-            "referrals": "referrals",
-            "eventwins": "eventWins",
             "reports": "reports",
+            "eventwins": "eventWins",
+            "referrals": "referrals",
+            "awards": "awardsCount",
         }
         categories: dict[str, list[dict[str, Any]]] = {}
         for cat_key, stat_key in mapping.items():
@@ -715,14 +783,21 @@ class LedgerDataProvider:
         ]
         return categories, field_rankings
 
-    def _fetch_live_podium_sync(self, members: list[dict[str, Any]]) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+    def _fetch_live_podium_sync(
+        self,
+        members: list[dict[str, Any]],
+        *,
+        refresh: bool = False,
+    ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
         if not self.supabase:
             raise RuntimeError("Supabase is not connected.")
 
+        now = time.time()
+        if not refresh and self._live_podium_cache and now - self._live_podium_cache[0] < 60:
+            return self._live_podium_cache[1]
+
         by_did = {m["discordId"]: m for m in members}
         rpc_specs = {
-            "points": ("top_points", "discordid", "points"),
-            "income": ("top_donations", "discordid", "donations"),
             "referrals": ("top_recruitment", "inviter_id", "invite_count"),
             "eventwins": ("top_events", "discordid", "eventswon"),
             "reports": ("top_reports", "discordid", "reports_answered"),
@@ -754,17 +829,22 @@ class LedgerDataProvider:
             if cat_key == "reports":
                 field_rankings = parsed_rows[:10]
 
-        return categories, field_rankings
+        roster_categories, _ = self._podium_from_roster(members)
+        categories["awards"] = roster_categories.get("awards", [])
 
-    async def get_podium(self, source: str = "auto") -> dict[str, Any]:
-        roster_payload = await self.get_roster(source)
+        result = (categories, field_rankings)
+        self._live_podium_cache = (time.time(), result)
+        return result
+
+    async def get_podium(self, source: str = "auto", *, refresh: bool = False) -> dict[str, Any]:
+        roster_payload = await self.get_roster(source, refresh=refresh)
         members = roster_payload["members"]
         effective_source = roster_payload["source"]
 
-        if effective_source == "live" and self.supabase is not None:
+        if effective_source == "live" and self.supabase is not None and not roster_payload["liveError"]:
             try:
                 categories, field_rankings = await asyncio.to_thread(
-                    self._fetch_live_podium_sync, members
+                    self._fetch_live_podium_sync, members, refresh=refresh
                 )
                 return {
                     "source": "live",
@@ -781,63 +861,99 @@ class LedgerDataProvider:
             "fieldRankings": field_rankings,
         }
 
-    async def resolve_roblox_avatar(self, username: str) -> str | None:
+    async def resolve_roblox_avatar(self, username: str) -> dict[str, str | None]:
         clean = (username or "").strip()
         if not clean:
-            return None
+            return {"headshotUrl": None, "fullBodyUrl": None}
+        key = clean.casefold()
+        cached = self._avatar_cache.get(key)
+        if cached:
+            ts, payload = cached
+            has_any = bool(payload.get("headshotUrl") or payload.get("fullBodyUrl"))
+            if time.time() - ts < (1800 if has_any else 15):
+                return payload
+        task = self._avatar_pending.get(key)
+        if task is None:
+            task = asyncio.create_task(self._resolve_and_cache_avatar(clean, key))
+            self._avatar_pending[key] = task
+        # One disconnected browser request must not cancel another's lookup.
+        return await asyncio.shield(task)
 
-        now = time.time()
-        cached = self._avatar_cache.get(clean.casefold())
-        if cached and now - cached[0] < 1800:
-            return cached[1]
+    async def _resolve_and_cache_avatar(self, username: str, key: str) -> dict[str, str | None]:
+        try:
+            async with self._avatar_semaphore:
+                payload = await self._fetch_roblox_avatar(username)
+            self._avatar_cache[key] = (time.time(), payload)
+            return payload
+        finally:
+            self._avatar_pending.pop(key, None)
 
-        avatar_url: str | None = None
-        timeout = aiohttp.ClientTimeout(total=5)
+    async def _fetch_thumbnail_url(
+        self,
+        session: aiohttp.ClientSession,
+        endpoint: str,
+        roblox_id: str,
+    ) -> str | None:
+        thumb_url = (
+            f"https://thumbnails.roblox.com/v1/users/{endpoint}"
+            f"?userIds={roblox_id}&size=420x420&format=Png&isCircular=false"
+        )
+        for attempt in range(2):
+            async with session.get(thumb_url) as resp:
+                retry = resp.status == 429
+                if resp.status == 200:
+                    items = (await resp.json()).get("data") or []
+                    item = items[0] if items else {}
+                    url = item.get("imageUrl")
+                    if item.get("state") == "Completed" and isinstance(url, str):
+                        parsed = urlparse(url)
+                        if parsed.scheme == "https" and parsed.hostname and not parsed.username and not parsed.password:
+                            return url
+                    retry = item.get("state") == "Pending"
+            if not retry or attempt:
+                break
+            await asyncio.sleep(0.5)
+        return None
+
+    async def _fetch_roblox_avatar(self, username: str) -> dict[str, str | None]:
+        timeout = aiohttp.ClientTimeout(total=6)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 roblox_id: str | None = None
-
-                # Official Roblox username lookup API first
                 try:
-                    async with session.post(
-                        "https://users.roblox.com/v1/usernames/users",
-                        json={"usernames": [clean], "excludeBannedUsers": False},
-                    ) as resp:
-                        if resp.status == 200:
-                            payload = await resp.json()
-                            data = payload.get("data") or []
-                            if data and data[0].get("id"):
-                                roblox_id = str(data[0]["id"])
+                    for attempt in range(2):
+                        async with session.post(
+                            "https://users.roblox.com/v1/usernames/users",
+                            json={"usernames": [username], "excludeBannedUsers": False},
+                        ) as resp:
+                            if resp.status == 200:
+                                data = (await resp.json()).get("data") or []
+                                if data and data[0].get("id"):
+                                    roblox_id = str(data[0]["id"])
+                            retry = resp.status == 429
+                        if not retry or attempt:
+                            break
+                        await asyncio.sleep(0.5)
                 except Exception:
-                    roblox_id = None
+                    pass
 
-                # Fallback redirect lookup matching commands/stats.py
                 if not roblox_id:
-                    try:
-                        profile_url = f"https://www.roblox.com/users/profile?username={quote(clean)}"
-                        async with session.get(profile_url, allow_redirects=True) as resp:
-                            parts = str(resp.url).split("/")
-                            if len(parts) > 4 and parts[4].isdigit():
-                                roblox_id = parts[4]
-                    except Exception:
-                        roblox_id = None
+                    profile_url = f"https://www.roblox.com/users/profile?username={quote(username)}"
+                    async with session.get(profile_url, allow_redirects=True) as resp:
+                        parts = urlparse(str(resp.url)).path.split("/")
+                        if len(parts) > 2 and parts[1] == "users" and parts[2].isdigit():
+                            roblox_id = parts[2]
+                if not roblox_id:
+                    return {"headshotUrl": None, "fullBodyUrl": None}
 
-                if roblox_id:
-                    thumb_url = (
-                        "https://thumbnails.roblox.com/v1/users/avatar-headshot"
-                        f"?userIds={roblox_id}&size=420x420&format=Png"
-                    )
-                    async with session.get(thumb_url) as resp:
-                        if resp.status == 200:
-                            thumb_data = await resp.json()
-                            items = thumb_data.get("data") or []
-                            if items and items[0].get("imageUrl"):
-                                avatar_url = items[0]["imageUrl"]
+                headshot_url, full_body_url = await asyncio.gather(
+                    self._fetch_thumbnail_url(session, "avatar-headshot", roblox_id),
+                    self._fetch_thumbnail_url(session, "avatar", roblox_id),
+                )
+                return {"headshotUrl": headshot_url, "fullBodyUrl": full_body_url}
         except Exception:
-            avatar_url = None
-
-        self._avatar_cache[clean.casefold()] = (now, avatar_url)
-        return avatar_url
+            pass
+        return {"headshotUrl": None, "fullBodyUrl": None}
 
     def import_csv(self, stats_csv: str | None, applications_csv: str | None) -> list[dict[str, Any]]:
         stats_by_did: dict[str, dict[str, Any]] = {}

@@ -1,4 +1,4 @@
-import { GitBranch, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
+import { GitBranch, RotateCcw, Search, ZoomIn, ZoomOut } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { MemberDossier } from '../types'
 import { formatNumber } from './EngravedIcons'
@@ -15,7 +15,23 @@ interface TreeEdge {
   to: TreeNode
 }
 
-function buildLineageForest(members: MemberDossier[]) {
+function countDescendants(
+  rootId: string,
+  childrenMap: Map<string, MemberDossier[]>,
+): number {
+  const seen = new Set<string>([rootId])
+  const queue = [...(childrenMap.get(rootId) ?? [])]
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    if (!seen.has(cur.discordId)) {
+      seen.add(cur.discordId)
+      queue.push(...(childrenMap.get(cur.discordId) ?? []))
+    }
+  }
+  return seen.size - 1
+}
+
+function analyzeLineage(members: MemberDossier[]) {
   const byId = new Map<string, MemberDossier>()
   for (const m of members) byId.set(m.discordId, m)
 
@@ -33,10 +49,24 @@ function buildLineageForest(members: MemberDossier[]) {
     }
   }
 
-  // Separate connected lineage roots (have >=1 child) from solo direct entries
-  const treeRoots = roots.filter((r) => (childrenMap.get(r.discordId)?.length ?? 0) > 0)
-  const soloMembers = roots.filter((r) => (childrenMap.get(r.discordId)?.length ?? 0) === 0)
+  const treeRoots = roots
+    .filter((r) => (childrenMap.get(r.discordId)?.length ?? 0) > 0)
+    .map((r) => ({
+      member: r,
+      networkSize: countDescendants(r.discordId, childrenMap),
+    }))
+    .sort((a, b) => b.networkSize - a.networkSize || a.member.id - b.member.id)
 
+  const soloMembers = roots.filter((r) => (childrenMap.get(r.discordId)?.length ?? 0) === 0)
+  const totalConnectedNodes = treeRoots.reduce((acc, r) => acc + 1 + r.networkSize, 0)
+
+  return { byId, childrenMap, treeRoots, soloMembers, totalConnectedNodes }
+}
+
+function layoutTrees(
+  rootMembers: MemberDossier[],
+  childrenMap: Map<string, MemberDossier[]>,
+) {
   const visited = new Set<string>()
   const buildNode = (member: MemberDossier): TreeNode => {
     visited.add(member.discordId)
@@ -49,9 +79,7 @@ function buildLineageForest(members: MemberDossier[]) {
     }
   }
 
-  const forest = treeRoots.map(buildNode)
-
-  // Assign hierarchical layout coordinates (top-down leaves spaced horizontally)
+  const forest = rootMembers.map(buildNode)
   const nodeW = 152
   const gapX = 16
   const levelH = 92
@@ -77,7 +105,7 @@ function buildLineageForest(members: MemberDossier[]) {
 
   for (const root of forest) {
     assignPositions(root, 0)
-    cursorX += 28
+    cursorX += 24
   }
 
   const allNodes: TreeNode[] = []
@@ -97,7 +125,7 @@ function buildLineageForest(members: MemberDossier[]) {
   const width = Math.max(540, cursorX + 24)
   const height = Math.max(360, maxY + 30)
 
-  return { forest, allNodes, edges, soloMembers, childrenMap, byId, width, height }
+  return { allNodes, edges, width, height }
 }
 
 function getBranchSet(
@@ -108,7 +136,6 @@ function getBranchSet(
   const active = new Set<string>()
   if (!focusId) return active
 
-  // Walk upstream sponsors
   let cur: string | null = focusId
   const guard = new Set<string>()
   while (cur && !guard.has(cur)) {
@@ -118,7 +145,6 @@ function getBranchSet(
     cur = m?.application.inviterId ?? null
   }
 
-  // Walk downstream recruits
   const queue = [focusId]
   while (queue.length > 0) {
     const id = queue.shift()!
@@ -132,22 +158,55 @@ function getBranchSet(
   return active
 }
 
+function resolveEffectiveSponsorId(
+  selectedSponsorId: string | null,
+  treeRoots: Array<{ member: MemberDossier; networkSize: number }>,
+  totalConnectedNodes: number,
+): string | null {
+  if (selectedSponsorId && treeRoots.some((r) => r.member.discordId === selectedSponsorId)) {
+    return selectedSponsorId
+  }
+  if (totalConnectedNodes > 24 && treeRoots.length > 0) {
+    return treeRoots[0].member.discordId
+  }
+  return null
+}
+
 export function LineageLeftPage({
   members,
   hoveredId,
+  selectedSponsorId,
+  onSelectSponsor,
   onHoverMember,
   onSelectMember,
 }: {
   members: MemberDossier[]
   hoveredId: string | null
+  selectedSponsorId: string | null
+  onSelectSponsor: (id: string | null) => void
   onHoverMember: (id: string | null) => void
   onSelectMember: (discordId: string) => void
 }) {
-  const { forest, soloMembers, childrenMap, byId } = useMemo(() => buildLineageForest(members), [members])
-  const focused = hoveredId ? byId.get(hoveredId) ?? members[0] : members[0]
+  const [sponsorQuery, setSponsorQuery] = useState('')
+  const { byId, childrenMap, treeRoots, soloMembers, totalConnectedNodes } = useMemo(
+    () => analyzeLineage(members),
+    [members],
+  )
+
+  const effectiveSponsorId = resolveEffectiveSponsorId(
+    selectedSponsorId,
+    treeRoots,
+    totalConnectedNodes,
+  )
+
+  const focused =
+    (hoveredId && byId.get(hoveredId)) ||
+    (effectiveSponsorId && byId.get(effectiveSponsorId)) ||
+    treeRoots[0]?.member ||
+    members[0]
 
   const branchSummary = useMemo(() => {
-    if (!focused) return { totalDescendants: 0, branchIncome: 0 }
+    if (!focused) return { totalDescendants: 0, branchReports: 0 }
     const descendants = new Set<string>()
     const q = [...(childrenMap.get(focused.discordId) ?? [])]
     while (q.length > 0) {
@@ -157,18 +216,29 @@ export function LineageLeftPage({
         q.push(...(childrenMap.get(next.discordId) ?? []))
       }
     }
-    let income = focused.stats.income
+    let reports = focused.stats.reports
     for (const did of descendants) {
-      income += byId.get(did)?.stats.income ?? 0
+      reports += byId.get(did)?.stats.reports ?? 0
     }
-    return { totalDescendants: descendants.size, branchIncome: income }
+    return { totalDescendants: descendants.size, branchReports: reports }
   }, [focused, childrenMap, byId])
+
+  const filteredSponsors = useMemo(() => {
+    const q = sponsorQuery.trim().toLowerCase()
+    if (!q) return treeRoots
+    return treeRoots.filter(
+      (r) =>
+        r.member.username.toLowerCase().includes(q) ||
+        String(r.member.id) === q ||
+        r.member.discordId.includes(q),
+    )
+  }, [treeRoots, sponsorQuery])
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between border-b border-[#5c4e40]/45 pb-2.5">
         <h2 className="text-xl font-bold text-[#1a1512]" style={{ fontFamily: 'var(--font-display)' }}>
-          Syndicate Referral Lineage
+          Organization Vouch Tree
         </h2>
         <GitBranch className="h-4 w-4 text-[#8f1d1d]" />
       </div>
@@ -197,51 +267,87 @@ export function LineageLeftPage({
 
           <dl className="mt-2.5 grid grid-cols-3 gap-2 text-xs" style={{ fontFamily: 'var(--font-mono)' }}>
             <div>
-              <dt className="text-[10px] text-[#5c4e40] uppercase">Direct Recruits</dt>
+              <dt className="text-[10px] text-[#5c4e40] uppercase">Direct Vouches</dt>
               <dd className="tabular-nums font-bold text-[#1a1512]">{focused.stats.referrals}</dd>
             </div>
             <div>
-              <dt className="text-[10px] text-[#5c4e40] uppercase">Downstream Crew</dt>
+              <dt className="text-[10px] text-[#5c4e40] uppercase">Vouched Network</dt>
               <dd className="tabular-nums font-bold text-[#1a1512]">{branchSummary.totalDescendants}</dd>
             </div>
             <div>
-              <dt className="text-[10px] text-[#5c4e40] uppercase">Branch Income</dt>
+              <dt className="text-[10px] text-[#5c4e40] uppercase">Network Reports</dt>
               <dd className="tabular-nums font-bold text-[#1d4d35]">
-                {formatNumber(branchSummary.branchIncome)}
+                {formatNumber(branchSummary.branchReports)}
               </dd>
             </div>
           </dl>
         </div>
       )}
 
-      {/* Top Bloodline Heads */}
-      <div>
+      {/* Vouching Sponsors Picker */}
+      <div className="flex flex-col gap-2">
         <div
-          className="mb-2 text-[11px] font-bold tracking-wider text-[#4c3e31] uppercase"
+          className="flex items-center justify-between text-[11px] font-bold tracking-wider text-[#4c3e31] uppercase"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          Founding Sponsors ({forest.length} Active Trees)
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {forest.map((root) => (
+          <span>Vouching Sponsors ({treeRoots.length} Active Trees)</span>
+          {totalConnectedNodes <= 24 && (
             <button
-              key={root.member.discordId}
               type="button"
-              onMouseEnter={() => onHoverMember(root.member.discordId)}
-              onClick={() => onSelectMember(root.member.discordId)}
-              className="brass-btn cursor-pointer border border-[#6b4e1c]/45 bg-[#efe4ce] px-2.5 py-1 text-xs font-bold text-[#1a1512] hover:border-[#8f1d1d]"
-              style={{ fontFamily: 'var(--font-mono)' }}
+              onClick={() => onSelectSponsor(null)}
+              className={`cursor-pointer border px-1.5 py-0.5 text-[10px] ${
+                effectiveSponsorId === null
+                  ? 'border-[#1a1512] bg-[#1a1512] text-[#f4ecdb]'
+                  : 'border-[#6b4e1c]/45 bg-[#efe4ce] text-[#3d3126]'
+              }`}
             >
-              {root.member.username} ({root.member.stats.referrals})
+              All Trees
             </button>
-          ))}
+          )}
+        </div>
+
+        {treeRoots.length > 8 && (
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-[#5c4e40]" />
+            <input
+              type="text"
+              value={sponsorQuery}
+              onChange={(e) => setSponsorQuery(e.target.value)}
+              placeholder="Filter sponsors..."
+              className="w-full border border-[#6b4e1c]/45 bg-[#faf4e8] py-1.5 pr-3 pl-8 text-xs text-[#1a1512] placeholder-[#6e5d4b]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            />
+          </div>
+        )}
+
+        <div className="ledger-scroll flex max-h-[168px] flex-wrap gap-1.5 overflow-y-auto pr-1">
+          {filteredSponsors.map((root) => {
+            const active = effectiveSponsorId === root.member.discordId
+            return (
+              <button
+                key={root.member.discordId}
+                type="button"
+                onMouseEnter={() => onHoverMember(root.member.discordId)}
+                onMouseLeave={() => onHoverMember(null)}
+                onClick={() => onSelectSponsor(root.member.discordId)}
+                className={`brass-btn cursor-pointer border px-2.5 py-1 text-xs font-bold ${
+                  active
+                    ? 'border-[#8f1d1d] bg-[#8f1d1d] text-[#f4ecdb]'
+                    : 'border-[#6b4e1c]/45 bg-[#efe4ce] text-[#1a1512] hover:border-[#8f1d1d]'
+                }`}
+                style={{ fontFamily: 'var(--font-mono)' }}
+              >
+                {root.member.username} ({root.networkSize})
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Unaffiliated / Direct Entry Records */}
-      <div className="border-t border-[#6b4e1c]/35 pt-3">
+      {/* Unaffiliated / Direct Entry Summary */}
+      <div className="mt-auto border-t border-[#6b4e1c]/35 pt-3">
         <div
-          className="mb-2 text-[11px] font-bold tracking-wider text-[#4c3e31] uppercase"
+          className="mb-1.5 text-[11px] font-bold tracking-wider text-[#4c3e31] uppercase"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           Direct / Unlinked Filings ({soloMembers.length})
@@ -252,7 +358,7 @@ export function LineageLeftPage({
           </p>
         ) : (
           <ul className="space-y-1 text-xs" style={{ fontFamily: 'var(--font-mono)' }}>
-            {soloMembers.map((m) => (
+            {soloMembers.slice(0, 6).map((m) => (
               <li key={m.discordId}>
                 <button
                   type="button"
@@ -263,6 +369,11 @@ export function LineageLeftPage({
                 </button>
               </li>
             ))}
+            {soloMembers.length > 6 && (
+              <li className="text-[11px] text-[#5c4e40]">
+                + {soloMembers.length - 6} additional direct entries in Master Directory.
+              </li>
+            )}
           </ul>
         )}
       </div>
@@ -273,36 +384,63 @@ export function LineageLeftPage({
 export function LineageRightPage({
   members,
   hoveredId,
+  selectedSponsorId,
   onHoverMember,
   onSelectMember,
 }: {
   members: MemberDossier[]
   hoveredId: string | null
+  selectedSponsorId: string | null
   onHoverMember: (id: string | null) => void
   onSelectMember: (discordId: string) => void
 }) {
   const [zoom, setZoom] = useState(1)
-  const { allNodes, edges, childrenMap, byId, width, height } = useMemo(
-    () => buildLineageForest(members),
+  const { byId, childrenMap, treeRoots, totalConnectedNodes } = useMemo(
+    () => analyzeLineage(members),
     [members],
   )
+
+  const effectiveSponsorId = resolveEffectiveSponsorId(
+    selectedSponsorId,
+    treeRoots,
+    totalConnectedNodes,
+  )
+
+  const rootsToDisplay = useMemo(() => {
+    if (effectiveSponsorId) {
+      const target = byId.get(effectiveSponsorId)
+      return target ? [target] : treeRoots.slice(0, 1).map((r) => r.member)
+    }
+    return treeRoots.map((r) => r.member)
+  }, [effectiveSponsorId, byId, treeRoots])
+
+  const { allNodes, edges, width, height } = useMemo(
+    () => layoutTrees(rootsToDisplay, childrenMap),
+    [rootsToDisplay, childrenMap],
+  )
+
   const activeBranch = useMemo(
     () => getBranchSet(hoveredId, byId, childrenMap),
     [hoveredId, byId, childrenMap],
   )
 
+  const headerTitle =
+    effectiveSponsorId && byId.get(effectiveSponsorId)
+      ? `Vouch Network of ${byId.get(effectiveSponsorId)!.username}`
+      : 'Organization Referral Chart'
+
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#5c4e40]/45 pb-2">
         <h3 className="text-lg font-bold text-[#1a1512]" style={{ fontFamily: 'var(--font-display)' }}>
-          Commission Family Chart
+          {headerTitle}
         </h3>
 
         <div className="flex items-center gap-1" style={{ fontFamily: 'var(--font-mono)' }}>
           <button
             type="button"
             onClick={() => setZoom((z) => Math.max(0.65, Number((z - 0.15).toFixed(2))))}
-            aria-label="Zoom out family tree"
+            aria-label="Zoom out referral tree"
             className="brass-btn cursor-pointer border border-[#6b4e1c]/45 bg-[#efe4ce] p-1 text-[#3d3126] hover:border-[#8f1d1d]"
           >
             <ZoomOut className="h-3.5 w-3.5" />
@@ -313,7 +451,7 @@ export function LineageRightPage({
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(1.6, Number((z + 0.15).toFixed(2))))}
-            aria-label="Zoom in family tree"
+            aria-label="Zoom in referral tree"
             className="brass-btn cursor-pointer border border-[#6b4e1c]/45 bg-[#efe4ce] p-1 text-[#3d3126] hover:border-[#8f1d1d]"
           >
             <ZoomIn className="h-3.5 w-3.5" />
@@ -341,15 +479,14 @@ export function LineageRightPage({
           <svg
             viewBox={`0 0 ${width} ${height}`}
             style={{
-              width: zoom === 1 ? '100%' : `${Math.round(zoom * 100)}%`,
+              width: width > 720 ? `${Math.round(width * 0.88 * zoom)}px` : `${Math.round(zoom * 100)}%`,
               height: 'auto',
               minWidth: zoom === 1 ? '100%' : `${Math.round(width * zoom * 0.72)}px`,
             }}
             className="block"
             role="img"
-            aria-label="CAA Syndicate Referral Family Tree"
+            aria-label="C.A.A. Organization Referral Tree"
           >
-            {/* Connecting Ink Curves */}
             {edges.map(({ from, to }) => {
               const highlighted =
                 hoveredId !== null &&
@@ -372,7 +509,6 @@ export function LineageRightPage({
               )
             })}
 
-            {/* Operative Nodes */}
             {allNodes.map((node) => {
               const isFocused = hoveredId === node.member.discordId
               const inBranch = hoveredId === null || activeBranch.has(node.member.discordId)
@@ -427,7 +563,7 @@ export function LineageRightPage({
       </div>
 
       <p className="text-[11px] text-[#5c4e40]" style={{ fontFamily: 'var(--font-mono)' }}>
-        Hover a card to trace upstream sponsors and downstream recruits; click any node to flip to that operative’s folio.
+        Select any Sponsor on the left to inspect their vouch network; click any node to open that member’s dossier.
       </p>
     </div>
   )

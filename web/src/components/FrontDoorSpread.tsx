@@ -125,9 +125,14 @@ export function FrontDoorSpreadPages({
   const left = (
     <div className="flex flex-col gap-4">
       <div className="border-b border-[#5c4e40]/45 pb-2.5">
-        <h2 className="text-xl font-bold text-[#1a1512]" style={{ fontFamily: 'var(--font-display)' }}>
-          Front Door Entry Log
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-xl font-bold text-[#1a1512]" style={{ fontFamily: 'var(--font-display)' }}>
+            Front Door Entry Log
+          </h2>
+          <span className="text-[10px] font-bold text-[#5c4e40] uppercase" style={{ fontFamily: 'var(--font-mono)' }}>
+            Strict Invite / Vouch Only
+          </span>
+        </div>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {filterButtons.map((btn) => (
             <button

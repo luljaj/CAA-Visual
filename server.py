@@ -38,7 +38,8 @@ def create_app(provider: LedgerDataProvider | None = None) -> web.Application:
 
     async def handle_roster(request: web.Request) -> web.Response:
         source = request.query.get("source", "auto")
-        payload = await data.get_roster(source=source)
+        refresh = request.query.get("refresh", "") in ("1", "true", "yes")
+        payload = await data.get_roster(source=source, refresh=refresh)
         return web.json_response(payload)
 
     async def handle_member(request: web.Request) -> web.Response:
@@ -53,13 +54,21 @@ def create_app(provider: LedgerDataProvider | None = None) -> web.Application:
 
     async def handle_podium(request: web.Request) -> web.Response:
         source = request.query.get("source", "auto")
-        payload = await data.get_podium(source=source)
+        refresh = request.query.get("refresh", "") in ("1", "true", "yes")
+        payload = await data.get_podium(source=source, refresh=refresh)
         return web.json_response(payload)
 
     async def handle_avatar(request: web.Request) -> web.Response:
         username = request.match_info.get("username", "").strip()
-        url = await data.resolve_roblox_avatar(username)
-        return web.json_response({"username": username, "url": url})
+        urls = await data.resolve_roblox_avatar(username)
+        return web.json_response(
+            {
+                "username": username,
+                "url": urls.get("headshotUrl"),
+                "headshotUrl": urls.get("headshotUrl"),
+                "fullBodyUrl": urls.get("fullBodyUrl"),
+            }
+        )
 
     async def handle_connect(request: web.Request) -> web.Response:
         try:
@@ -133,10 +142,11 @@ def main() -> None:
 
     provider = LedgerDataProvider()
     status = provider.get_status()
-    source_label = "LIVE SUPABASE" if status["liveConnected"] else f"SAMPLE ARCHIVE ({status['archiveCount']} files)"
+    source_label = ("LIVE SUPABASE (awaiting first read)" if status["liveConfigured"]
+                    else f"SAMPLE ARCHIVE ({status['archiveCount']} files)")
 
     print("=" * 64)
-    print("  THE BLACK LEDGER — Custom Adversaries Association Archive")
+    print("  CAA-Visual · THE BLACK LEDGER — Custom Adversaries Association")
     print(f"  Listening : http://{args.host}:{args.port}")
     print(f"  Data Mode : {source_label}")
     if status["liveError"]:

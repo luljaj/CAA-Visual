@@ -14,8 +14,13 @@ export async function fetchStatus(): Promise<StatusResponse> {
   return readJson<StatusResponse>(res)
 }
 
-export async function fetchRoster(source: DataSource | 'auto' = 'auto'): Promise<RosterResponse> {
-  const res = await fetch(`/api/roster?source=${encodeURIComponent(source)}`)
+export async function fetchRoster(
+  source: DataSource | 'auto' = 'auto',
+  options?: { refresh?: boolean },
+): Promise<RosterResponse> {
+  const qs = new URLSearchParams({ source })
+  if (options?.refresh) qs.set('refresh', '1')
+  const res = await fetch(`/api/roster?${qs.toString()}`)
   return readJson<RosterResponse>(res)
 }
 
@@ -25,19 +30,36 @@ export async function fetchMemberById(discordId: string): Promise<MemberDossier>
   return data.member
 }
 
-export async function fetchPodium(source: DataSource | 'auto' = 'auto'): Promise<PodiumResponse> {
-  const res = await fetch(`/api/podium?source=${encodeURIComponent(source)}`)
+export async function fetchPodium(
+  source: DataSource | 'auto' = 'auto',
+  options?: { refresh?: boolean },
+): Promise<PodiumResponse> {
+  const qs = new URLSearchParams({ source })
+  if (options?.refresh) qs.set('refresh', '1')
+  const res = await fetch(`/api/podium?${qs.toString()}`)
   return readJson<PodiumResponse>(res)
 }
 
-export async function fetchRobloxAvatar(username: string): Promise<string | null> {
+export interface RobloxAvatarBundle {
+  headshotUrl: string | null
+  fullBodyUrl: string | null
+}
+
+export async function fetchRobloxAvatar(username: string): Promise<RobloxAvatarBundle> {
   try {
     const res = await fetch(`/api/avatar/${encodeURIComponent(username)}`)
-    if (!res.ok) return null
-    const data = (await res.json()) as { url?: string | null }
-    return data.url ?? null
+    if (!res.ok) return { headshotUrl: null, fullBodyUrl: null }
+    const data = (await res.json()) as {
+      url?: string | null
+      headshotUrl?: string | null
+      fullBodyUrl?: string | null
+    }
+    return {
+      headshotUrl: data.headshotUrl ?? data.url ?? null,
+      fullBodyUrl: data.fullBodyUrl ?? null,
+    }
   } catch {
-    return null
+    return { headshotUrl: null, fullBodyUrl: null }
   }
 }
 

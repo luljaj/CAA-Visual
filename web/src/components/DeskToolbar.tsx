@@ -1,9 +1,11 @@
 import {
   BookMarked,
   BookOpen,
+  Camera,
   Columns2,
   Database,
   Download,
+  RefreshCw,
   Search,
   Stamp,
   Volume2,
@@ -13,11 +15,11 @@ import { playBrassClick } from '../sound'
 import type { ChapterId, DataSource, MemberDossier } from '../types'
 
 const CHAPTER_LABELS: Record<ChapterId, string> = {
-  index: 'Chapter I · Master Directory',
-  dossiers: 'Chapter II · Personnel Dossier',
+  index: 'Chapter I · Personnel Directory',
+  dossiers: 'Chapter II · Employee Dossier',
   frontdoor: 'Chapter III · Front Door Log',
   podium: 'Chapter IV · Honor Podium & Field Rankings',
-  lineage: 'Chapter V · Family Referral Tree',
+  lineage: 'Chapter V · Vouch & Referral Tree',
   vault: 'Chapter VI · Data Vault & Importer',
 }
 
@@ -36,6 +38,9 @@ export function DeskToolbar({
   onJumpBookmark,
   onOpenExport,
   onOpenVault,
+  onOpenPlates,
+  onRefreshLive,
+  refreshing,
   onToggleMute,
   stampButtonRef,
 }: {
@@ -53,6 +58,9 @@ export function DeskToolbar({
   onJumpBookmark: () => void
   onOpenExport: () => void
   onOpenVault: () => void
+  onOpenPlates: () => void
+  onRefreshLive: () => void
+  refreshing: boolean
   onToggleMute: () => void
   stampButtonRef: React.RefObject<HTMLButtonElement | null>
 }) {
@@ -101,6 +109,21 @@ export function DeskToolbar({
           <Database className="h-3 w-3 text-[#a68037]" />
           <span className="tracking-wider">{sourceBadge.label}</span>
         </button>
+
+        {activeSource === 'live' && (
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => {
+              playBrassClick()
+              onRefreshLive()
+            }}
+            title="Refresh live Supabase records"
+            className="brass-btn inline-flex cursor-pointer items-center justify-center rounded border border-[#a68037]/40 bg-[#131b16]/90 p-1.5 text-[#d7b262] hover:border-[#d7b262] disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
       </div>
 
       {/* Center group: Chapter readout & Quick Search */}
@@ -138,7 +161,7 @@ export function DeskToolbar({
               }`}
             >
               <Columns2 className="h-3.5 w-3.5" />
-              <span>{compareMode ? 'Exit Sit-Down' : 'Sit-Down'}</span>
+              <span>{compareMode ? 'Exit Compare' : 'Compare'}</span>
             </button>
 
             {!compareMode && (
@@ -202,6 +225,19 @@ export function DeskToolbar({
             <span>Ribbon: {bookmarkedMember.username}</span>
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => {
+            playBrassClick()
+            onOpenPlates()
+          }}
+          title="Inspect C.A.A. archival photo plates"
+          className="brass-btn inline-flex cursor-pointer items-center gap-1.5 rounded border border-[#a68037]/45 bg-[#19110d]/90 px-2.5 py-1.5 text-[#dfca9f] hover:border-[#d7b262]"
+        >
+          <Camera className="h-3.5 w-3.5 text-[#d7b262]" />
+          <span className="hidden xl:inline">Plates</span>
+        </button>
 
         <button
           type="button"

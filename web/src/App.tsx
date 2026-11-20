@@ -17,9 +17,15 @@ import {
   type FrontDoorFilter,
   FrontDoorSpreadPages,
 } from './components/FrontDoorSpread'
-import { filterAndSortMembers, IndexLeftPage, IndexRightPage } from './components/IndexSpread'
+import {
+  filterAndSortMembers,
+  INDEX_PAGE_SIZE,
+  IndexLeftPage,
+  IndexRightPage,
+} from './components/IndexSpread'
 import { LineageLeftPage, LineageRightPage } from './components/LineageSpread'
 import { OpenBookShell, type TurnSnapshot } from './components/OpenBookShell'
+import { PhotoGalleryModal } from './components/PhotoGalleryModal'
 import { PodiumLeftPage, PodiumRightPage } from './components/PodiumSpread'
 import { SearchPalette } from './components/SearchPalette'
 import { SitDownLeftPage, SitDownRightPage } from './components/SitDownSpread'
@@ -44,10 +50,9 @@ const EMPTY_TOTALS: RosterTotals = {
   leadershipCount: 0,
   madeCount: 0,
   internCount: 0,
-  combinedPoints: 0,
-  combinedIncome: 0,
   combinedReports: 0,
   combinedEventWins: 0,
+  combinedReferrals: 0,
   totalAwards: 0,
   flaggedMembers: 0,
   activeStrikesCount: 0,
@@ -72,6 +77,9 @@ export function App() {
   const [filter, setFilter] = useState<FilterMode>('all')
   const [sort, setSort] = useState<SortField>('id')
   const [indexQuery, setIndexQuery] = useState('')
+  const [indexPage, setIndexPage] = useState(0)
+  const [selectedSponsorId, setSelectedSponsorId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [frontDoorFilter, setFrontDoorFilter] = useState<FrontDoorFilter>('all')
   const [frontDoorPage, setFrontDoorPage] = useState(0)
   const [hoveredLineageId, setHoveredLineageId] = useState<string | null>(null)
@@ -79,6 +87,7 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [stampOpen, setStampOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [photoPlateIndex, setPhotoPlateIndex] = useState<number | null>(null)
   const [muted, setMuted] = useState(() => isSoundMuted())
 
   const [stampsByMember, setStampsByMember] = useState<Record<string, CustomStamp[]>>(() =>
@@ -92,12 +101,15 @@ export function App() {
   const turnKeyRef = useRef(0)
   const stampButtonRef = useRef<HTMLButtonElement | null>(null)
 
-  const loadLedger = useCallback(async (requestedSource: DataSource | 'auto' = 'auto') => {
+  const loadLedger = useCallback(async (requestedSource: DataSource | 'auto' = 'auto', refresh = false) => {
+    setRefreshing(true)
     try {
-      const [st, rosterRes, podRes] = await Promise.all([
+      const rosterRes = await fetchRoster(requestedSource, { refresh })
+      const [st, podRes] = await Promise.all([
         fetchStatus(),
-        fetchRoster(requestedSource),
-        fetchPodium(requestedSource),
+        rosterRes.source === 'live' && rosterRes.liveError
+          ? Promise.resolve(null)
+          : fetchPodium(rosterRes.source),
       ])
       setStatus(st)
       setMembers(rosterRes.members)
@@ -122,6 +134,7 @@ export function App() {
       setLiveError(err instanceof Error ? err.message : 'Unable to reach ledger server.')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [])
 
@@ -142,6 +155,10 @@ export function App() {
   useEffect(() => {
     setFrontDoorPage(0)
   }, [frontDoorFilter, activeSource])
+
+  useEffect(() => {
+    setIndexPage(0)
+  }, [filter, sort, indexQuery, activeSource])
 
   const activeMemberIndex = useMemo(() => {
     if (!members.length) return -1
@@ -212,15 +229,18 @@ export function App() {
                 query={indexQuery}
                 filteredCount={filteredIndexMembers.length}
                 totalCount={members.length}
-                onChangeFilter={setFilter}
-                onChangeSort={setSort}
-                onChangeQuery={setIndexQuery}
+                onChangeFilter={(value) => { setFilter(value); setIndexPage(0) }}
+                onChangeSort={(value) => { setSort(value); setIndexPage(0) }}
+                onChangeQuery={(value) => { setIndexQuery(value); setIndexPage(0) }}
+                onOpenPhotoPlate={setPhotoPlateIndex}
               />
             ),
             right: (
               <IndexRightPage
                 members={filteredIndexMembers}
                 sort={sort}
+                page={indexPage}
+                onChangePage={setIndexPage}
                 onSelectMember={(did) => openMemberDossier(did)}
               />
             ),
@@ -319,6 +339,7 @@ export function App() {
                 podium={podium}
                 allMembers={members}
                 onSelectMember={(did) => openMemberDossier(did)}
+                onOpenPhotoPlate={setPhotoPlateIndex}
               />
             ),
             right: (
@@ -335,6 +356,8 @@ export function App() {
             left: (
               <LineageLeftPage
                 members={members}
+                selectedSponsorId={selectedSponsorId}
+                onSelectSponsor={setSelectedSponsorId}
                 hoveredId={hoveredLineageId}
                 onHoverMember={setHoveredLineageId}
                 onSelectMember={(did) => openMemberDossier(did)}
@@ -343,6 +366,7 @@ export function App() {
             right: (
               <LineageRightPage
                 members={members}
+                selectedSponsorId={selectedSponsorId}
                 hoveredId={hoveredLineageId}
                 onHoverMember={setHoveredLineageId}
                 onSelectMember={(did) => openMemberDossier(did)}
@@ -357,7 +381,7 @@ export function App() {
                 status={status}
                 activeSource={activeSource}
                 liveError={liveError}
-                onSelectSource={(src) => void loadLedger(src)}
+                onSelectSource={(src) => void loadLedger(src, true)}
                 onConnected={() => void loadLedger('live')}
                 onOpenFetchedMember={(member) => {
                   setMembers((prev) =>
@@ -380,6 +404,7 @@ export function App() {
                   setNotesByMember({})
                   setBookmarkId(null)
                 }}
+                onOpenPhotoPlate={setPhotoPlateIndex}
               />
             ),
           }
@@ -392,7 +417,10 @@ export function App() {
       filter,
       sort,
       indexQuery,
+      indexPage,
+      selectedSponsorId,
       filteredIndexMembers,
+      indexPage,
       compareRightMember,
       stampsByMember,
       notesByMember,
@@ -400,6 +428,7 @@ export function App() {
       frontDoorFilter,
       podium,
       hoveredLineageId,
+      selectedSponsorId,
       status,
       activeSource,
       liveError,
@@ -441,9 +470,11 @@ export function App() {
     setChapter(nextChapter)
   }
 
+  const indexTotalPages = Math.max(1, Math.ceil(filteredIndexMembers.length / INDEX_PAGE_SIZE))
   const frontDoorTotalPages = Math.max(1, Math.ceil(filteredFrontDoor.length / 6))
 
   const canPrev =
+    (chapter === 'index' && indexPage > 0) ||
     (chapter === 'dossiers' && !compareMode && activeMemberIndex > 0) ||
     (chapter === 'frontdoor' && frontDoorPage > 0) ||
     (chapter === 'dossiers' && !compareMode && activeMemberIndex === 0)
@@ -454,7 +485,10 @@ export function App() {
     (chapter === 'frontdoor' && frontDoorPage < frontDoorTotalPages - 1)
 
   const handlePrevPage = useCallback(() => {
-    if (chapter === 'dossiers' && !compareMode) {
+    if (chapter === 'index' && indexPage > 0) {
+      setIndexPage((p) => Math.max(0, p - 1))
+      playPageTurn()
+    } else if (chapter === 'dossiers' && !compareMode) {
       if (activeMemberIndex > 0) {
         const target = members[activeMemberIndex - 1]
         const curSpread = buildSpreadForState('dossiers', selectedMemberId, frontDoorPage, false)
@@ -472,11 +506,16 @@ export function App() {
       setFrontDoorPage(nextP)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chapter, compareMode, activeMemberIndex, members, selectedMemberId, frontDoorPage, buildSpreadForState, runPageTurnEffect])
+  }, [chapter, indexPage, compareMode, activeMemberIndex, members, selectedMemberId, frontDoorPage, buildSpreadForState, runPageTurnEffect])
 
   const handleNextPage = useCallback(() => {
     if (chapter === 'index') {
-      handleSelectChapter('dossiers')
+      if (indexPage < indexTotalPages - 1) {
+        setIndexPage((p) => Math.min(indexTotalPages - 1, p + 1))
+        playPageTurn()
+      } else {
+        handleSelectChapter('dossiers')
+      }
     } else if (chapter === 'dossiers' && !compareMode && activeMemberIndex < members.length - 1) {
       const target = members[activeMemberIndex + 1]
       const curSpread = buildSpreadForState('dossiers', selectedMemberId, frontDoorPage, false)
@@ -491,7 +530,7 @@ export function App() {
       setFrontDoorPage(nextP)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chapter, compareMode, activeMemberIndex, members, selectedMemberId, frontDoorPage, frontDoorTotalPages, buildSpreadForState, runPageTurnEffect])
+  }, [chapter, indexPage, indexTotalPages, compareMode, activeMemberIndex, members, selectedMemberId, frontDoorPage, frontDoorTotalPages, buildSpreadForState, runPageTurnEffect])
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -531,17 +570,17 @@ export function App() {
 
   const pageIndicator =
     chapter === 'index'
-      ? 'Pages 1–2 · Master Directory'
+      ? `Directory Page ${indexPage + 1} of ${indexTotalPages}`
       : chapter === 'dossiers'
         ? compareMode
-          ? 'The Sit-Down · Side-by-Side'
+          ? 'Side-by-Side Comparison'
           : `Folio ${activeMemberIndex + 1} of ${Math.max(1, members.length)}`
         : chapter === 'frontdoor'
           ? `Log Folio ${frontDoorPage + 1} of ${frontDoorTotalPages}`
           : chapter === 'podium'
             ? 'Honor Roll · Top 3 & Top 10'
             : chapter === 'lineage'
-              ? 'Family Referral Chart'
+              ? 'Organization Referral Chart'
               : 'Data Vault & CSV Importer'
 
   const progressRatio =
@@ -588,13 +627,21 @@ export function App() {
 
   if (!bookOpen) {
     return (
-      <BookCover
-        status={status}
-        memberCount={loading ? 14 : members.length}
-        muted={muted}
-        onToggleMute={toggleMute}
-        onOpenBook={() => setBookOpen(true)}
-      />
+      <>
+        <BookCover
+          status={status}
+          memberCount={loading ? 14 : members.length}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onOpenBook={() => setBookOpen(true)}
+          onOpenPhotoPlate={(idx) => setPhotoPlateIndex(idx)}
+        />
+        <PhotoGalleryModal
+          plateIndex={photoPlateIndex}
+          onChangePlate={setPhotoPlateIndex}
+          onClose={() => setPhotoPlateIndex(null)}
+        />
+      </>
     )
   }
 
@@ -621,7 +668,10 @@ export function App() {
         }}
         onOpenExport={() => setExportOpen(true)}
         onOpenVault={() => handleSelectChapter('vault')}
+        onOpenPlates={() => setPhotoPlateIndex(0)}
         onToggleMute={toggleMute}
+        onRefreshLive={() => void loadLedger('live', true)}
+        refreshing={refreshing}
       />
 
       <OpenBookShell
@@ -671,6 +721,12 @@ export function App() {
         member={activeMember}
         customStamps={activeMember ? stampsByMember[activeMember.discordId] ?? [] : []}
         onClose={() => setExportOpen(false)}
+      />
+
+      <PhotoGalleryModal
+        plateIndex={photoPlateIndex}
+        onChangePlate={setPhotoPlateIndex}
+        onClose={() => setPhotoPlateIndex(null)}
       />
     </div>
   )

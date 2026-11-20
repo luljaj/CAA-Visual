@@ -54,7 +54,7 @@ export function DossierLeftPage({
         ? { text: 'PROMO REVIEW DUE', color: 'border-[#8c6118] text-[#7a5210]' }
         : member.rankTier === 'intern'
           ? { text: 'INTERN · PROBATION', color: 'border-[#4c3e31] text-[#4c3e31]' }
-          : { text: 'MADE MEMBER', color: 'border-[#1d4d35] text-[#1d4d35]' }
+          : { text: 'VERIFIED EMPLOYEE', color: 'border-[#1d4d35] text-[#1d4d35]' }
 
   return (
     <div className="flex flex-col gap-4">
@@ -216,13 +216,23 @@ export function DossierLeftPage({
         </div>
       </div>
 
-      {/* Recruitment Lineage */}
+      {/* Intern Disclaimer Notice */}
+      {member.rankTier === 'intern' && (
+        <div
+          className="border border-[#8c6118]/55 bg-[#f3e5c3]/80 px-3 py-2 text-[11px] font-bold tracking-wide text-[#5a3d0a]"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          NOTICE: C.A.A. is not responsible for Interns.
+        </div>
+      )}
+
+      {/* Vouched Personnel */}
       <div className="border-t border-[#6b4e1c]/35 pt-3">
         <div
           className="mb-2 flex items-center justify-between text-[11px] font-bold tracking-wider text-[#4c3e31] uppercase"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
-          <span>Recruited Operatives ({member.stats.referrals})</span>
+          <span>Vouched Personnel ({member.stats.referrals})</span>
           {member.invitees.length > 0 && <span className="text-[10px] text-[#5c4e40]">Click to flip</span>}
         </div>
 
@@ -280,26 +290,12 @@ export function DossierRightPage({
   }
 
   const metrics: Array<{
-    key: 'points' | 'income' | 'eventWins' | 'reports' | 'referrals'
+    key: 'reports' | 'eventWins' | 'referrals' | 'awardsCount'
     label: string
     value: number
     rank: number
     max: number
   }> = [
-    {
-      key: 'points',
-      label: 'Syndicate Points',
-      value: member.stats.points,
-      rank: member.ranks.points,
-      max: maxStat('points'),
-    },
-    {
-      key: 'income',
-      label: 'Donations / Income',
-      value: member.stats.income,
-      rank: member.ranks.income,
-      max: maxStat('income'),
-    },
     {
       key: 'reports',
       label: 'Teamer Reports',
@@ -320,6 +316,13 @@ export function DossierRightPage({
       value: member.stats.referrals,
       rank: member.ranks.referrals,
       max: maxStat('referrals'),
+    },
+    {
+      key: 'awardsCount',
+      label: 'Awards & Citations',
+      value: member.stats.awardsCount,
+      rank: member.ranks.awardsCount,
+      max: maxStat('awardsCount'),
     },
   ]
 
@@ -527,7 +530,7 @@ export function DossierRightPage({
           rows={2}
           value={marginNote}
           onChange={(e) => onChangeMarginNote(e.target.value)}
-          placeholder="Jot private commission remarks in pencil..."
+          placeholder="Jot private management remarks in pencil..."
           className="w-full resize-none border border-[#8b765a]/40 bg-[#f8f0dc]/70 px-2.5 py-1.5 text-lg leading-snug text-[#2f2924] placeholder-[#7d6c58] focus:border-[#8f1d1d] focus:outline-none"
           style={{ fontFamily: 'var(--font-hand)' }}
         />
