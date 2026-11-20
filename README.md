@@ -34,7 +34,7 @@ cd web && npm install && npm run build
 - **Six Ledger Chapters**:
   - **Index**: Organization standing summary, filters, sort controls, and paginated 25-row Personnel Directory.
   - **Dossiers**: Paper-clipped portrait with `SUIT`/`MUG` attire inspection, Front Door application slip, Intern responsibility notice, 4-pillar performance ledger (`Reports`, `Event Wins`, `Referrals`, `Awards`), grouped `(Nx)` awards, active strike history, custom **Management Stamp Kit**, handwritten **Pencil Margin Notes** (`localStorage`), **Side-by-Side Compare**, and **Export Card** PNG generator.
-  - **Front Door**: Chronological entry filings with 6-week intern promotion follow-up flags.
+  - **Front Door**: Chronological entry filings and stated intent archive.
   - **Podium**: Mirrors `/podium` (Top 3 across `Reports`, `Event Wins`, `Referrals`, `Awards`) and `/fieldrankings` (Top 10 by reports answered).
   - **Lineage**: Interactive SVG vouch & referral tree with sponsor filter, network metrics, and zoom.
   - **Vault**: Source switcher (`Live Supabase` / `Sample Archive` / `CSV Import`), direct Discord User ID RPC lookup, and CSV uploader.

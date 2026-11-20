@@ -1,7 +1,7 @@
-import { Sparkles, UserCheck } from 'lucide-react'
+import { UserCheck } from 'lucide-react'
 import type { MemberDossier } from '../types'
 
-export type FrontDoorFilter = 'all' | 'interns' | 'promodue' | 'referred'
+export type FrontDoorFilter = 'all' | 'interns' | 'referred'
 
 export function filterFrontDoorMembers(
   members: MemberDossier[],
@@ -15,7 +15,6 @@ export function filterFrontDoorMembers(
 
   return sorted.filter((m) => {
     if (filter === 'interns') return m.rankTier === 'intern'
-    if (filter === 'promodue') return m.application.promotionReviewDue
     if (filter === 'referred') return Boolean(m.application.inviter || m.application.inviterId)
     return true
   })
@@ -53,22 +52,12 @@ function FrontDoorTicket({
           </span>
         </div>
 
-        {member.application.promotionReviewDue ? (
-          <span
-            className="inline-flex items-center gap-1 border border-[#8c6118]/70 bg-[#e7ce8e]/55 px-1.5 py-0.5 text-[10px] font-bold text-[#543707]"
-            style={{ fontFamily: 'var(--font-mono)' }}
-          >
-            <Sparkles className="h-3 w-3" />
-            6+ WKS INTERN ALERT
-          </span>
-        ) : (
-          <span
-            className="tabular-nums text-[10px] text-[#5c4e40]"
-            style={{ fontFamily: 'var(--font-mono)' }}
-          >
-            {member.application.formattedDate}
-          </span>
-        )}
+        <span
+          className="tabular-nums text-[10px] text-[#5c4e40]"
+          style={{ fontFamily: 'var(--font-mono)' }}
+        >
+          {member.application.formattedDate}
+        </span>
       </div>
 
       <p className="text-xs leading-relaxed text-[#2c241d]" style={{ fontFamily: 'var(--font-mono)' }}>
@@ -118,7 +107,6 @@ export function FrontDoorSpreadPages({
   const filterButtons: Array<{ id: FrontDoorFilter; label: string }> = [
     { id: 'all', label: 'All Filings' },
     { id: 'interns', label: 'Interns' },
-    { id: 'promodue', label: '6-Wk Review Due' },
     { id: 'referred', label: 'With Referrer' },
   ]
 

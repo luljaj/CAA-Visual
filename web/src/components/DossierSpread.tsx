@@ -50,11 +50,9 @@ export function DossierLeftPage({
   const standingStamp =
     member.totalActiveStrikes > 0
       ? { text: 'UNDER SCRUTINY', color: 'border-[#8f1d1d] text-[#8f1d1d]' }
-      : member.application.promotionReviewDue
-        ? { text: 'PROMO REVIEW DUE', color: 'border-[#8c6118] text-[#7a5210]' }
-        : member.rankTier === 'intern'
-          ? { text: 'INTERN · PROBATION', color: 'border-[#4c3e31] text-[#4c3e31]' }
-          : { text: 'VERIFIED EMPLOYEE', color: 'border-[#1d4d35] text-[#1d4d35]' }
+      : member.rankTier === 'intern'
+        ? { text: 'INTERN · PROBATION', color: 'border-[#4c3e31] text-[#4c3e31]' }
+        : { text: 'VERIFIED EMPLOYEE', color: 'border-[#1d4d35] text-[#1d4d35]' }
 
   return (
     <div className="flex flex-col gap-4">
@@ -203,11 +201,7 @@ export function DossierLeftPage({
                 <span className="block text-[10px] font-bold tracking-wider text-[#5c4e40] uppercase">
                   Tenure
                 </span>
-                <span
-                  className={`tabular-nums font-bold ${
-                    member.application.promotionReviewDue ? 'text-[#8c6118]' : 'text-[#4c3e31]'
-                  }`}
-                >
+                <span className="tabular-nums font-bold text-[#4c3e31]">
                   {member.application.weeksSinceApplication} wks on file
                 </span>
               </div>

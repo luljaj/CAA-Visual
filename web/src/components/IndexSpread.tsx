@@ -1,4 +1,4 @@
-import { Camera, Search, ShieldAlert, Sparkles } from 'lucide-react'
+import { Camera, Search, ShieldAlert } from 'lucide-react'
 import type { FilterMode, MemberDossier, RosterTotals, SortField } from '../types'
 import { formatNumber } from './EngravedIcons'
 import { PortraitFrame } from './PortraitFrame'
@@ -10,7 +10,6 @@ const FILTER_OPTIONS: Array<{ id: FilterMode; label: string }> = [
   { id: 'intern', label: 'Interns' },
   { id: 'flagged', label: 'Flagged Strikes' },
   { id: 'awarded', label: 'Award Holders' },
-  { id: 'promodue', label: 'Promo Review Due' },
 ]
 
 const SORT_OPTIONS: Array<{ id: SortField; label: string }> = [
@@ -37,7 +36,6 @@ export function filterAndSortMembers(
     if (filter === 'intern' && m.rankTier !== 'intern') return false
     if (filter === 'flagged' && m.totalActiveStrikes === 0) return false
     if (filter === 'awarded' && m.stats.awards.length === 0) return false
-    if (filter === 'promodue' && !m.application.promotionReviewDue) return false
 
     if (!q) return true
     const haystack = [
@@ -164,7 +162,17 @@ export function IndexLeftPage({
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           <div className="border-b border-dotted border-[#8b765a]/40 pb-1">
-            <dt className="text-[10px] text-[#5c4e40] uppercase">Reports Answered</dt>
+            <dt className="text-[10px] text-[#5c4e40] uppercase">
+              {totals.totalReportsCalled !== null ? 'Reports Called' : 'Field Responders'}
+            </dt>
+            <dd className="tabular-nums text-base font-bold text-[#1a1512]">
+              {totals.totalReportsCalled !== null
+                ? formatNumber(totals.totalReportsCalled)
+                : formatNumber(totals.activeResponders)}
+            </dd>
+          </div>
+          <div className="border-b border-dotted border-[#8b765a]/40 pb-1">
+            <dt className="text-[10px] text-[#5c4e40] uppercase">Personnel Dispatched</dt>
             <dd className="tabular-nums text-base font-bold text-[#1a1512]">
               {formatNumber(totals.combinedReports)}
             </dd>
@@ -195,16 +203,6 @@ export function IndexLeftPage({
               }`}
             >
               {totals.activeStrikesCount} ({totals.flaggedMembers} files)
-            </dd>
-          </div>
-          <div className="border-b border-dotted border-[#8b765a]/40 pb-1">
-            <dt className="text-[10px] text-[#5c4e40] uppercase">6-Wk Promo Alerts</dt>
-            <dd
-              className={`tabular-nums text-base font-bold ${
-                totals.promoDueCount > 0 ? 'text-[#8c6118]' : 'text-[#1d4d35]'
-              }`}
-            >
-              {formatNumber(totals.promoDueCount)}
             </dd>
           </div>
         </dl>
@@ -372,16 +370,6 @@ export function IndexRightPage({
                           >
                             <ShieldAlert className="h-2.5 w-2.5" />
                             {m.totalActiveStrikes}
-                          </span>
-                        )}
-                        {m.application.promotionReviewDue && (
-                          <span
-                            title="6-week Intern Promotion Follow-Up Due"
-                            className="inline-flex items-center gap-0.5 border border-[#8c6118]/60 bg-[#8c6118]/12 px-1 py-0.2 text-[9px] font-bold text-[#6d490d]"
-                            style={{ fontFamily: 'var(--font-mono)' }}
-                          >
-                            <Sparkles className="h-2.5 w-2.5" />
-                            PROMO DUE
                           </span>
                         )}
                       </div>

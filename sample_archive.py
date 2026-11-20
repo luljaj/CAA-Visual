@@ -408,7 +408,6 @@ def get_sample_archive() -> list[dict[str, Any]]:
                     "formattedDate": _fmt_dt(app_dt),
                     "isLegacyMigrated": m["isLegacyMigrated"],
                     "weeksSinceApplication": weeks,
-                    "promotionReviewDue": m["rankTier"] == "intern" and weeks >= 6,
                 },
                 "stats": {
                     "eventWins": m["eventWins"],
@@ -451,19 +450,24 @@ def compute_ranks(members: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return members
 
 
-def compute_totals(members: list[dict[str, Any]]) -> dict[str, Any]:
+def compute_totals(
+    members: list[dict[str, Any]],
+    *,
+    reports_called: int | None = None,
+) -> dict[str, Any]:
     return {
         "totalMembers": len(members),
         "leadershipCount": sum(1 for m in members if m["rankTier"] == "leadership"),
         "madeCount": sum(1 for m in members if m["rankTier"] == "made"),
         "internCount": sum(1 for m in members if m["rankTier"] == "intern"),
+        "totalReportsCalled": reports_called,
+        "activeResponders": sum(1 for m in members if int(m["stats"].get("reports", 0) or 0) > 0),
         "combinedReports": sum(int(m["stats"].get("reports", 0) or 0) for m in members),
         "combinedEventWins": sum(int(m["stats"].get("eventWins", 0) or 0) for m in members),
         "combinedReferrals": sum(int(m["stats"].get("referrals", 0) or 0) for m in members),
         "totalAwards": sum(len(m["stats"].get("awards") or []) for m in members),
         "flaggedMembers": sum(1 for m in members if int(m.get("totalActiveStrikes", 0) or 0) > 0),
         "activeStrikesCount": sum(int(m.get("totalActiveStrikes", 0) or 0) for m in members),
-        "promoDueCount": sum(1 for m in members if m["application"].get("promotionReviewDue")),
     }
 
 

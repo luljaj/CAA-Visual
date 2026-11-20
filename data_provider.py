@@ -269,12 +269,6 @@ def _build_dossier(
             "formattedDate": format_application_date(created_dt),
             "isLegacyMigrated": is_legacy,
             "weeksSinceApplication": weeks_since,
-            "promotionReviewDue": (
-                not is_legacy
-                and rank_tier == "intern"
-                and weeks_since is not None
-                and weeks_since >= 6
-            ),
         },
         "stats": {
             "eventWins": event_wins,
@@ -308,6 +302,7 @@ class LedgerDataProvider:
         self._roster_lock = asyncio.Lock()
         self._archive_cache: list[dict[str, Any]] | None = None
         self._live_roster_cache: tuple[float, list[dict[str, Any]]] | None = None
+        self._live_reports_called_cache: int | None = None
         self._live_podium_cache: tuple[float, tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]] | None = None
         self._auto_init_supabase()
 
@@ -537,6 +532,14 @@ class LedgerDataProvider:
             except Exception:
                 strikes_rows = []
 
+            try:
+                rep_count_resp = (
+                    self.supabase.table("reports").select("id", count="exact").limit(1).execute()
+                )
+                self._live_reports_called_cache = rep_count_resp.count
+            except Exception:
+                self._live_reports_called_cache = None
+
             app_by_did: dict[str, dict[str, Any]] = {}
             for row in app_rows:
                 did = _as_str_id(row.get("discordid") or row.get("discord_id"))
@@ -680,7 +683,7 @@ class LedgerDataProvider:
                 return {
                     "source": "live",
                     "liveError": None,
-                    "totals": compute_totals(members),
+                    "totals": compute_totals(members, reports_called=self._live_reports_called_cache),
                     "members": members,
                 }
             except Exception as exc:
@@ -716,7 +719,7 @@ class LedgerDataProvider:
         return {
             "source": "archive",
             "liveError": self.live_error,
-            "totals": compute_totals(archive),
+            "totals": compute_totals(archive, reports_called=812),
             "members": archive,
         }
 

@@ -11,7 +11,6 @@ export interface ApplicationInfo {
   formattedDate: string
   isLegacyMigrated: boolean
   weeksSinceApplication: number | null
-  promotionReviewDue: boolean
 }
 
 export interface OperativeStats {
@@ -70,13 +69,14 @@ export interface RosterTotals {
   leadershipCount: number
   madeCount: number
   internCount: number
+  totalReportsCalled: number | null
+  activeResponders: number
   combinedReports: number
   combinedEventWins: number
   combinedReferrals: number
   totalAwards: number
   flaggedMembers: number
   activeStrikesCount: number
-  promoDueCount: number
 }
 
 export interface StatusResponse {
@@ -137,6 +137,5 @@ export type FilterMode =
   | 'intern'
   | 'flagged'
   | 'awarded'
-  | 'promodue'
 
 export type SortField = 'id' | 'reports' | 'eventWins' | 'referrals' | 'awards' | 'recent'

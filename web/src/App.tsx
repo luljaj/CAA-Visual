@@ -50,13 +50,14 @@ const EMPTY_TOTALS: RosterTotals = {
   leadershipCount: 0,
   madeCount: 0,
   internCount: 0,
+  totalReportsCalled: null,
+  activeResponders: 0,
   combinedReports: 0,
   combinedEventWins: 0,
   combinedReferrals: 0,
   totalAwards: 0,
   flaggedMembers: 0,
   activeStrikesCount: 0,
-  promoDueCount: 0,
 }
 
 export function App() {
